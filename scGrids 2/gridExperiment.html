@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' ws: 'unsafe-inline' data: gap: https://ssl.gstatic.com 'unsafe-eval'; style-src 'self' 'unsafe-inline'; media-src *; img-src 'self' data: content:;">
+    <meta name="format-detection" content="telephone=no">
+    <meta name="msapplication-tap-highlight" content="no">
+    <meta name="viewport" content="user-scalable=no, initial-scale=1, maximum-scale=1, minimum-scale=1, width=device-width">
+    <title>GridSearch</title>
+
+    <!--<script src="js/jquery-3.2.1.min.js" charset="utf-8"></script>-->
+    <!--<script src="js/jquery-ui.min.js" charset="utf-8"></script>-->
+    <script src="js/d3.v3.min.js" charset="utf-8"></script>
+
+    <link rel="stylesheet" type="text/css" href="css/index.css">
+    <link rel="stylesheet" type="text/css" href="css/ui.css">
+    <link rel="stylesheet" type="text/css" href="css/bootstrap.css">
+    <link rel="stylesheet" type="text/css" href="css/grid2D.css">
+
+    <script type="text/javascript" src="kernelSmooth.json"></script>
+	
+</head>
+
+<body>
+    <div class='container' style="width: 95%; height: 95%">
+
+        <!-- User ID form -->
+        <div id="rt-start" class="route">
+            <h1>Please enter the participant Id.</h1>
+			
+            <div class="initial-form">
+                <input name="uid-input" id="uid-input"><br>
+                <button id="btn-initial-form" onclick="giveParticipantID();">Start</button>
+            </div>
+        </div>
+
+        <div id="page2" style="display:none; text-align:center;">
+            <div id="instructions" style="display:block">
+                <h3 class="text-xl">Instructions:</h3>
+                <br>
+                <p class="text-l"> In this game, you will be presented with a series of 11 different grids to explore. Each grid has 64 different tiles. When you click on a tile, you will receive a reward, indicated by the revealed color. <b>Darker colors correspond to higher rewards</b>.
+                    <br /> <br /> Your goal is to collect as many points as possible. <br /> <br /> Each grid will start with a single revealed tile. You will be given 25 clicks to collect as many points as possible. For each click, you can either click to explore a new tile or re-click a previously revealed tile. Both will earn the associated reward, but there may be small variations in the points when you re-click a tile.
+
+                    <br /><br /> <b>Importantly! Points are clustered along the grid, such that areas with high-value points tend to appear close to each other and areas of low-value points tend to appear close to each other. </b>In order to help you acquire the most points, reward Um dir ein bisschen zu helfen, sind die Kästchen zusätzlich
+                    farbig markiert. Dunklere Farben entsprechen höheren Punktzahlen. Außerdem bekommst du noch einen wichtigen
+                    
+
+                    <br><br>The number of remaining clicks is shown above the grid. When they run out, you will be shown how well you performed with a rating out of 5 stars and then taken to the next grid. The better your performance, the greater your performance bonus!
+
+                    If you've understood the instructions, you try it out by clicking on the grid to the left. Try to collect as many points as possible!
+                   </p>
+            </div>
+            <div>
+                <button class='btn-primary text-xl' type="button" name="button" id="buttonGoToPageThree">I understand</button>
+            </div>
+        </div>
+
+
+        <div id="page3" style="display:none;">
+            <br>
+            <h1 class="text-xl"> Please answer a few questions </h1>
+
+            <div class="radio">
+                <legend class="text-xl">What is your goal?</legend>
+                <label class="text-ml">
+                <input type="radio" name="q1" id="q1a" value="option1" checked>
+                 &nbsp; &nbsp; To learn colors
+              </label>
+            </div>
+            <div class="radio">
+                <label class="text-ml">
+                <input type="radio" name="q1" id="q1b" value="option2">
+                 &nbsp;  &nbsp; To collect as many points as possible
+              </label>
+            </div>
+            <div class="radio">
+                <label class="text-ml">
+                <input type="radio" name="q1" id="q1d" value="option4">
+                 &nbsp;  &nbsp; To find the tile with the darkest color
+              </label>
+            </div>
+            <div class="radio">
+                <label class="text-ml">
+                <input type="radio" name="q1" id="q1c" value="option3" >
+                 &nbsp;  &nbsp; Don't know
+              </label>
+            </div>
+
+            <div class="radio">
+                <legend class="text-xl">Which tiles are you allowed to click?</legend>
+            </div>
+
+            <div class="radio">
+                <label class="text-ml">
+                        <input type="radio" name="q2" id="q2a" value="option1" checked>
+                        &nbsp; &nbsp; Only unrevealed tiles
+                </label>
+            </div>
+
+            <div class="radio">
+                <label class="text-ml">
+                        <input type="radio" name="q2" id="q2b" value="option2">
+                        &nbsp; &nbsp; Only previously revealed tiles
+                </label>
+            </div>
+
+            <div class="radio">
+                <label class="text-ml">
+                        <input type="radio" name="q2" id="q2c" value="option3">
+                        &nbsp; &nbsp; Either unrevealed or previously revealed tiles
+                </label>
+            </div>
+
+
+            <div class="radio">
+                <legend class="text-xl">How are the tiles on the grid related to one another?</legend>
+                <label class="text-ml">
+                <input type="radio" name="q3" id="q3a" value="option1" checked>
+                 &nbsp;  &nbsp; They are unrelated
+              </label>
+            </div>
+            <div class="radio">
+                <label class="text-ml">
+                <input type="radio" name="q3" id="q3b" value="option2">
+                 &nbsp;  &nbsp; High point values are <strong>never</strong> next to one another
+              </label>
+            </div>
+            <div class="radio">
+                <label class="text-ml">
+                <input type="radio" name="q3" id="q3c" value="option3" >
+                 &nbsp;  &nbsp; High point values are <strong>always</strong> next to one another
+              </label>
+            </div>
+            <div class="radio">
+                <label class="text-ml">
+                <input type="radio" name="q3" id="q3d" value="option3" >
+                 &nbsp;  &nbsp; High point values <strong>tend</strong> to be next to one another
+
+              </label>
+            </div><br>
+
+            <p class="text-l"> Only when you have corrected answered these questions, will the experiment begin</p>
+            <div>
+                <button class='btn-primary text-xl' type="button" name="button" id="buttonInstructionsCheck">Check my answers</button>
+            </div>
+        </div>
+
+
+        <div id="page4" style="display:none; text-align:center;">
+            <br><br><br><br><br><br><br><br><br><br><br><br>
+
+            <h1 class="text-xxl"> Great job! You have answered all of the questions correctly and can begin the experiment.</h1>
+            <br><br>
+
+
+
+            <button class='btn-primary text-xl' type="button" name="button" id="buttonGoToPageFive">Start</button>
+
+
+        </div>
+
+
+
+
+        <!--Experiment Begins -->
+        <div id="page5" style="width: 100%; overflow: hidden; display:none">
+            <br><br>
+            <div id="gridDiv">
+                <table id='grid' class='grid'>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <div id="alertGridDiv" style="display:none">
+                <h2>Bonus round!!</h2>
+                <p class="text-xl">
+                    We will ask you a few questions about 10 unrevealed tiles. For each tile, please estimate how many points you think you would earn if you click it and how confident you are in this judgment. Once you have answered these questions, you will be asked to choose one of the 10 options. The experiment will the continue as normal until all 25 clicks are used up.
+                    
+                </p><br><br>
+                <button class='btn-primary text-xl' type="button" name="button" id="buttonGoToBonusLevel">Continue</button>
+            </div>
+
+
+
+            <div id="progress">
+                <font class="text-xl" color="green"><b><div id="scoretotal"></div></b></font>
+                <div class="text-xl" id="remaining1">Grids remaining: <b>12</b></div>
+                <div class="text-xl" id="remaining2">Clicks remaining: <b>25</b></div>
+
+                <div id="sidebarInstructions">
+                    <br>
+
+                    <p id="sidebarInstructions-1" class="text-l">
+                        In this experiment, you will explore 12 different grids. 
+                        Initially, a single tile will be revealed in each grid. 
+                        When you click on a tile, you will earn points based on the color, where darker colors are higher points. 
+                        You will have 25 clicks to explore each grid.<br><br>
+                        You can always click on a new tile or reclick on a previously revealed tile. For new tiles, you won't know how many points you will earn. However, you might discover some tiles with high rewards. When you reclick a previously revealed tile, the point value might vary slightly, but will generally be the same. So it is a good idea to reclick highly rewarding tiles.
+                    </p>
+
+                    <p id="sidebarInstructions-2" class="text-l" style="display:none">
+                        
+                        Two important tips: The color of a clicked tile indicates the number of points, where darker colors are higher points. Additionally, tiles with high points tend to be in similar locations. Similarly, tiles with low points are also near one another. Learn the spatial patterns in order to collect as many points as possible!
+                        <br><br>
+                        <b>Please try the task now by clicking on the grid to the left!</b> Once you've used up all 25 clicks, press the "Continue" button below.
+                           
+                    </p> 
+
+                    <p id="sidebarInstructions-3" class="text-l" style="display:none">
+                            <b>Great job!</b><br> After this tutorial, you can earn up to 5 stars for each grid. The more points you acquire, the more stars you will earn.
+                            <br><br>
+                            <b>Have you understood all of the instructions?</b>  
+                    </p>
+
+                    <br>
+                    <button class='btn-primary text-xl' type="button" id="buttonInstructions">Continue</button>
+                </div>
+
+                <div id="sidebarContent" style="display:none">
+                    <div class="text-xl"><b>Stars collected:</b></div>
+
+
+                    <div id="stars">
+
+                    </div>
+                </div>
+                
+
+                <br><br><br>
+                <div class="text-l" id="bonusSidebarInstructions" style="display:none; padding:5px; border: 3px dashed orange;">
+                    <h2>Bonus round!</h2>
+                    In this bonus round, you will initially make 15 clicks as normal. 
+                    <br><br>
+                    At this point, we will ask you a few questions, and then the task will continue as normal until all 25 clicks are used up.
+                </div>
+
+                <div class="text-l" id="bonusSidebarInstructions2" style="display:none; padding:5px; border: 3px dashed orange;">
+                    <h2>Bonus Round!</h2>
+                    You can now complete the rest of this round as normal. Remember to collect as many points as possible!
+                </div>
+
+            </div>
+
+            <div id="bonusProgress" style="display:none">
+
+                <h2>Bonus Round</h2>
+                <div id="bonusInstructions">
+                    <br>
+                    <p class="text-l">Tiles remaining: <span id="bonusRemainingCounter">10</span></p>
+                    <br>
+                    <p class="text-xl">
+                        How many points do you think you will earn if you click here?
+                    </p>
+
+                    <input id="valueSlider" type="range" min="0" max="50" step="1" oninput="onValueSliderChange(this.value)" onchange="onValueSliderChange(this.value)">
+                    <div class="text-l">
+                        low
+                        <span class="spacer" style="width: 250px; display: inline-block;"></span> high
+                    </div>
+
+
+                    <br><br>
+                    <p class="text-xl">How confident are you?</p>
+
+                    <br>
+
+                    <input id="confidenceSlider" type="range" min="0" max="10" step="1" oninput="onConfidenceSliderChange(this.value)" onchange="onConfidenceSliderChange(this.value)">
+
+                    <div class="text-l">
+                        not at all
+                        <span class="spacer" style="width: 190px; display: inline-block;"></span> very sure
+                    </div>
+
+
+                    <br><br><br>
+                    <button class='btn-primary text-xl' type="button" name="button" id="buttonNextBonus">Continue</button>
+                </div>
+
+                <div id="bonusInstructions2" style="display:none">
+                    <br><br>
+                    <p class="text-xl">
+                        Which of the 10 tiles would you prefer to click on? Please click it now. Afterwards, the experiment will continue as normal.
+                    </p>
+
+                </div>
+
+
+            </div>
+        </div>
+
+
+
+
+
+        <div id="page5finished" style="display:none; text-align: center;">
+
+            <div id="trials"> You have complited this grid. There are 10 grids remaining.</div>
+
+            <br><br>
+
+            <div class="text-l" id="bonusIntroInstructions" style="display:none; padding:5px; border: 3px dashed orange;">
+                    <h2>Bonus Round!</h2>
+                     In this bonus round, you will initially make 15 clicks as normal, aiming to collect as many points as possible. We will then ask you a few questions about 10 unrevealed tiles. Please try to answer these questions as accurately as possible. Afterwards, the task will continue as normal until all 25 clicks are used up.
+                </div>
+    
+                <br><br>
+
+
+            <button class='btn-primary text-xl' type="button" id="nextTrialButton">Continue</button>
+
+        </div>
+
+        <div id="page6" style="display:none; text-align: center;">
+            <div id="thanksforcompleting">
+                <h1>
+                    <font size="4">Thank you very much for your participation.</font>
+                </h1>
+            </div>
+            <br>
+            <button class='btn-primary text-xl' type="button" id="goToPage7">Finish</button>
+
+        </div>
+
+        <div id="page7" style="display:none; text-align: center;">
+
+            <h2 class="text-xxl">Thank you!</h2>
+
+            <br><br>
+            <button class='btn-primary text-xl' type="button" id="finishButton">Save data</button>
+
+        </div>
+
+        <!-- End screen -->
+        <div id="rt-end" class="route" style="display:none;">
+            <h1>End.</h1><br><br>
+            <center>
+			<p>Instructions to the experimenter: Only when the data has been saved correctly, click Ctrl + Shift + R to restart the experiment.</p></center>
+        </div>
+
+
+    </div>
+
+    <script type="text/javascript" src="js/gridSearch.js"></script>
+</body>
+
+</html>

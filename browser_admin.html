@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Admin Panel - Data Export</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    
+    .admin-container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    h1 {
+      color: #333;
+      margin-bottom: 20px;
+    }
+    
+    .panel-section {
+      margin-bottom: 30px;
+    }
+    
+    select, button {
+      padding: 10px;
+      font-size: 16px;
+      border-radius: 4px;
+    }
+    
+    select {
+      min-width: 200px;
+      border: 1px solid #ccc;
+    }
+    
+    button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      cursor: pointer;
+      margin-left: 10px;
+    }
+    
+    button:hover {
+      background: #45a049;
+    }
+    
+    .preview-section {
+      margin-top: 20px;
+      border: 1px solid #eee;
+      padding: 15px;
+      border-radius: 4px;
+      max-height: 400px;
+      overflow: auto;
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    
+    th, td {
+      padding: 8px;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+    }
+    
+    th {
+      background-color: #f2f2f2;
+    }
+    
+    .message {
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 4px;
+    }
+    
+    .success {
+      background-color: #dff0d8;
+      color: #3c763d;
+    }
+    
+    .error {
+      background-color: #f2dede;
+      color: #a94442;
+    }
+    
+    .admin-note {
+      font-size: 12px;
+      color: #666;
+      margin-top: 20px;
+      font-style: italic;
+    }
+
+    /* Add this to the style section in admin-panel.html */
+    .filter-section {
+      margin: 15px 0;
+      padding: 15px;
+      background: #f9f9f9;
+      border-radius: 8px;
+      border: 1px solid #eee;
+    }
+    
+    .filter-controls {
+      display: flex;
+      gap: 15px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      min-width: 150px;
+    }
+
+    .filter-group label {
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+
+    .filter-group select {
+      padding: 8px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+    }
+
+    .filter-buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+    }
+
+    /* Make table headers sticky */
+    .preview-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .preview-table th {
+      position: sticky;
+      top: 0;
+      background-color: #f2f2f2;
+      z-index: 1;
+    }
+
+    /* Add alternating row colors */
+    .preview-table tbody tr:nth-child(even) {
+      background-color: #f8f8f8;
+    }
+
+    .preview-table tbody tr:hover {
+      background-color: #f0f0f0;
+    }
+    
+    #returnToGameButton {
+      background: #4169E1;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      margin: 15px 0;
+      cursor: pointer;
+      display: block;
+    }
+    
+    #returnToGameButton:hover {
+      background: #3050C0;
+    }
+  </style>
+</head>
+<body>
+  <div class="admin-container">
+    <h1>Admin Panel - Monkey Data Export</h1>
+    
+    <!-- Return to Game button placed prominently below the title -->
+    <button id="returnToGameButton">Return to Game</button>
+    
+    <div class="panel-section">
+      <label for="monkeySelect">Select Monkey:</label>
+      <select id="monkeySelect">
+        <option value="">Loading monkeys...</option>
+      </select>
+      <button id="fetchButton">Fetch Data</button>
+    </div>
+    
+    <!-- Add filter controls -->
+    <div id="filterControls" style="display: none; margin-top: 20px;">
+      <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+        <div>
+          <label for="levelFilter">Level:</label>
+          <select id="levelFilter">
+            <option value="all">All Levels</option>
+            <option value="1">Level 1</option>
+            <option value="2">Level 2</option>
+            <option value="3">Level 3</option>
+          </select>
+        </div>
+        <div>
+          <label for="tryFilter">Try Number:</label>
+          <select id="tryFilter">
+            <option value="all">All Tries</option>
+          </select>
+        </div>
+        <button id="applyFilterButton">Apply Filter</button>
+        <button id="clearFilterButton">Clear Filter</button>
+      </div>
+    </div>
+    
+    <div id="exportControls" style="display: none;">
+      <button id="exportLevelsButton">Export Levels CSV</button>
+      <button id="exportTrialsButton">Export Trials CSV</button>
+      <button id="exportLevel3Button">Export Level 3 Special Format</button>
+    </div>
+    
+    <div id="message" class="message" style="display: none;"></div>
+    
+    <div id="dataPreview" class="preview-section" style="display: none;">
+      <h3>Data Preview</h3>
+      <div id="previewContent"></div>
+    </div>
+    
+    <div class="admin-note">
+      <p>Note: This browser version stores all data locally in your browser.</p>
+      <p>Data will persist as long as you don't clear browser storage.</p>
+    </div>
+
+  </div>
+
+  <!-- SQL.js Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+  <script>
+    // Initialize SQL.js
+    let db;
+    let SQL;
+    let allMonkeyData = [];
+    
+    // Define maximum trials per level
+    const MAX_TRIALS = {
+      1: 10,  // Level 1: 10 trials
+      2: 20,  // Level 2: 20 trials
+      3: 25   // Level 3: 25 trials
+    };
+    
+    document.addEventListener('DOMContentLoaded', async function() {
+      const monkeySelect = document.getElementById('monkeySelect');
+      const fetchButton = document.getElementById('fetchButton');
+      const levelFilter = document.getElementById('levelFilter');
+      const tryFilter = document.getElementById('tryFilter');
+      const applyFilterButton = document.getElementById('applyFilterButton');
+      const clearFilterButton = document.getElementById('clearFilterButton');
+      const exportLevelsButton = document.getElementById('exportLevelsButton');
+      const exportTrialsButton = document.getElementById('exportTrialsButton');
+      const exportLevel3Button = document.getElementById('exportLevel3Button');
+      const messageDiv = document.getElementById('message');
+      const dataPreviewDiv = document.getElementById('dataPreview');
+      const previewContentDiv = document.getElementById('previewContent');
+      const exportControls = document.getElementById('exportControls');
+      const filterControls = document.getElementById('filterControls');
+      const returnToGameButton = document.getElementById('returnToGameButton');
+      
+      // Initialize the database connection to the in-browser DB
+      try {
+        // Initialize SQL.js
+        SQL = await initSqlJs({
+          locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
+        });
+        
+        // Create a new database using the existing data if any
+        const savedDbData = localStorage.getItem('monkeyGameDb');
+        
+        if (savedDbData) {
+          try {
+            // Try to parse the base64 data
+            const binaryString = atob(savedDbData);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            
+            // Convert binary string to bytes
+            for (let i = 0; i < len; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            
+            // Create the database from the bytes
+            db = new SQL.Database(bytes);
+            console.log("Successfully loaded database from localStorage");
+          } catch (e) {
+            console.error("Error loading database from localStorage:", e);
+            showMessage("Error loading saved database. Starting with a new database.", "error");
+            db = new SQL.Database();
+            createEmptyDatabase();
+          }
+        } else {
+          console.log("No saved database found, creating new one");
+          db = new SQL.Database();
+          createEmptyDatabase();
+        }
+        
+        function createEmptyDatabase() {
+          db.run(`
+            CREATE TABLE IF NOT EXISTS monkeys (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              name TEXT NOT NULL UNIQUE,
+              species TEXT
+            );
+            
+            CREATE TABLE IF NOT EXISTS levels (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              monkey_name TEXT NOT NULL,
+              level INTEGER NOT NULL,
+              try_number INTEGER NOT NULL,
+              score INTEGER,
+              timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              highest_score INTEGER DEFAULT 0
+            );
+            
+            CREATE TABLE IF NOT EXISTS trials (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              monkey_name TEXT NOT NULL,
+              level INTEGER NOT NULL,
+              trial_number INTEGER NOT NULL,
+              try_number INTEGER DEFAULT 1,
+              score INTEGER,
+              timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+          `);
+        }
+      } catch (error) {
+        console.error("Failed to initialize database:", error);
+        showMessage("Error initializing database. Admin panel may not work properly.", "error");
+      }
+      
+      // Add event listener for Return to Game button
+      returnToGameButton.addEventListener('click', function() {
+        window.location.href = 'browser_game.html';
+      });
+      
+      // Load monkey list on page load
+      loadMonkeyList();
+      
+      // Event Handlers
+      fetchButton.addEventListener('click', fetchMonkeyData);
+      applyFilterButton.addEventListener('click', applyFilters);
+      clearFilterButton.addEventListener('click', clearFilters);
+      levelFilter.addEventListener('change', updateTryNumbers);
+      exportLevelsButton.addEventListener('click', exportLevelsCSV);
+      exportTrialsButton.addEventListener('click', exportTrialsCSV);
+      exportLevel3Button.addEventListener('click', exportLevel3Format);
+      
+      // Load the monkey list from the database
+      function loadMonkeyList() {
+        try {
+          showMessage('Loading monkey list...', 'loading');
+          
+          // Query the database for all monkeys
+          const stmt = db.prepare("SELECT name, species FROM monkeys");
+          const monkeys = [];
+          
+          while (stmt.step()) {
+            monkeys.push(stmt.getAsObject());
+          }
+          
+          stmt.free();
+          
+          populateMonkeyDropdown(monkeys);
+        } catch (error) {
+          console.error('Error loading monkey list:', error);
+          showMessage('Error loading monkey list: ' + error.message, 'error');
+        }
+      }
+      
+      // Populate try numbers based on selected level
+      function updateTryNumbers() {
+        const level = levelFilter.value;
+        tryFilter.innerHTML = '<option value="all">All Tries</option>';
+        
+        if (level === 'all') return;
+        
+        // Get unique try numbers for the selected level
+        const tryNumbers = new Set();
+        allMonkeyData.forEach(entry => {
+          if (entry.level_number == level && entry.try_number) {
+            tryNumbers.add(entry.try_number);
+          }
+          if (entry.level_number == level && entry.trial_try_number) {
+            tryNumbers.add(entry.trial_try_number);
+          }
+        });
+        
+        // Add options for each try number
+        Array.from(tryNumbers).sort((a, b) => a - b).forEach(tryNum => {
+          const option = document.createElement('option');
+          option.value = tryNum;
+          option.textContent = `Try ${tryNum}`;
+          tryFilter.appendChild(option);
+        });
+      }
+      
+      function applyFilters() {
+        displayFilteredData();
+      }
+      
+      function clearFilters() {
+        levelFilter.value = 'all';
+        tryFilter.innerHTML = '<option value="all">All Tries</option>';
+        tryFilter.value = 'all';
+        displayFilteredData();
+      }
+      
+      async function fetchMonkeyData() {
+        const monkeyName = monkeySelect.value;
+        if (!monkeyName) {
+          showMessage('Please select a monkey', 'error');
+          return;
+        }
+        
+        try {
+          showMessage('Fetching data...', 'loading');
+          
+          // Query the database for the monkey's data
+          try {
+            // First get monkey details
+            const monkeyQuery = db.prepare("SELECT name, species FROM monkeys WHERE name = ?");
+            monkeyQuery.bind([monkeyName]);
+            const monkey = monkeyQuery.step() ? monkeyQuery.getAsObject() : null;
+            monkeyQuery.free();
+            
+            if (!monkey) {
+              showMessage('No data found for this monkey', 'error');
+              return;
+            }
+            
+            // Get level data
+            const levelsQuery = db.prepare(
+              "SELECT level as level_number, score as level_score, try_number, highest_score " +
+              "FROM levels WHERE monkey_name = ? ORDER BY level, try_number"
+            );
+            levelsQuery.bind([monkeyName]);
+            
+            const levels = [];
+            while (levelsQuery.step()) {
+              levels.push(levelsQuery.getAsObject());
+            }
+            levelsQuery.free();
+            
+            // Get trial data
+            const trialsQuery = db.prepare(
+              "SELECT id as trial_id, level as level_number, trial_number, try_number as trial_try_number, " +
+              "score as trial_score FROM trials WHERE monkey_name = ? " +
+              "ORDER BY level_number, trial_try_number, trial_number"
+            );
+            trialsQuery.bind([monkeyName]);
+            
+            const trials = [];
+            while (trialsQuery.step()) {
+              trials.push(trialsQuery.getAsObject());
+            }
+            trialsQuery.free();
+            
+            // Combine the data
+            const result = [];
+            
+            for (const level of levels) {
+              const level_dict = Object.assign({}, level);
+              level_dict.monkey_name = monkeyName;
+              level_dict.monkey_species = monkey.species;
+              result.push(level_dict);
+            }
+            
+            for (const trial of trials) {
+              const trial_dict = Object.assign({}, trial);
+              trial_dict.monkey_name = monkeyName;
+              trial_dict.monkey_species = monkey.species;
+              result.push(trial_dict);
+            }
+            
+            if (result.length === 0) {
+              // Return basic monkey info
+              result.push({
+                monkey_name: monkeyName,
+                monkey_species: monkey.species,
+                level_number: null,
+                level_score: null,
+                try_number: null,
+                highest_score: null,
+                trial_number: null,
+                trial_score: null
+              });
+            }
+            
+            allMonkeyData = result;
+            
+            filterControls.style.display = 'block';
+            exportControls.style.display = 'block';
+            showMessage('Data loaded successfully', 'success');
+            
+            // Update try number dropdown based on available levels
+            updateTryNumbers();
+            
+            // Display the data
+            displayFilteredData();
+            
+          } catch (error) {
+            console.error('Database error:', error);
+            showMessage('Error querying database: ' + error.message, 'error');
+          }
+        } catch (error) {
+          console.error('Error fetching monkey data:', error);
+          showMessage('Error fetching data: ' + error.message, 'error');
+        }
+      }
+      
+      function displayFilteredData() {
+        previewContentDiv.innerHTML = '';
+        dataPreviewDiv.style.display = 'block';
+        
+        const selectedLevel = levelFilter.value;
+        const selectedTry = tryFilter.value;
+        
+        // Create a table for levels data
+        const levelsTable = createLevelsTable(selectedLevel, selectedTry);
+        
+        // Create a table for trials data
+        const trialsTable = createTrialsTable(selectedLevel, selectedTry);
+        
+        // Create a heading for the levels table
+        const levelsHeading = document.createElement('h4');
+        levelsHeading.textContent = 'Levels Data';
+        
+        if (levelsTable.querySelector('tbody').children.length > 0) {
+          previewContentDiv.appendChild(levelsHeading);
+          previewContentDiv.appendChild(levelsTable);
+        } else {
+          previewContentDiv.appendChild(document.createElement('p')).textContent = 'No levels data available for selected filters';
+        }
+        
+        previewContentDiv.appendChild(document.createElement('br'));
+        
+        // Create a heading for the trials table
+        const trialsHeading = document.createElement('h4');
+        trialsHeading.textContent = 'Trials Data';
+        
+        if (trialsTable.querySelector('tbody').children.length > 0) {
+          previewContentDiv.appendChild(trialsHeading);
+          previewContentDiv.appendChild(trialsTable);
+        } else {
+          previewContentDiv.appendChild(document.createElement('p')).textContent = 'No trials data available for selected filters';
+        }
+      }
+      
+      function createLevelsTable(selectedLevel, selectedTry) {
+        const levelsTable = document.createElement('table');
+        levelsTable.className = 'preview-table';
+        
+        // Create headers
+        const levelsHeader = document.createElement('thead');
+        levelsHeader.innerHTML = `
+          <tr>
+            <th>Monkey Name</th>
+            <th>Level</th>
+            <th>Try Number</th>
+            <th>Score</th>
+            <th>Highest Score</th>
+          </tr>
+        `;
+        levelsTable.appendChild(levelsHeader);
+        
+        // Create body
+        const levelsBody = document.createElement('tbody');
+        
+        // Extract unique level entries and filter by selections
+        const levelEntries = new Map();
+        
+        allMonkeyData.forEach(entry => {
+          if (entry.level_number !== null) {
+            // Apply filters
+            if ((selectedLevel === 'all' || entry.level_number == selectedLevel) &&
+                (selectedTry === 'all' || entry.try_number == selectedTry)) {
+              
+              const key = `${entry.monkey_name}-${entry.level_number}-${entry.try_number}`;
+              
+              if (!levelEntries.has(key)) {
+                levelEntries.set(key, true);
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                  <td>${entry.monkey_name}</td>
+                  <td>${entry.level_number}</td>
+                  <td>${entry.try_number || 1}</td>
+                  <td>${entry.level_score}</td>
+                  <td>${entry.highest_score || 0}</td>
+                `;
+                levelsBody.appendChild(row);
+              }
+            }
+          }
+        });
+        
+        levelsTable.appendChild(levelsBody);
+        return levelsTable;
+      }
+      
+      function createTrialsTable(selectedLevel, selectedTry) {
+        const trialsTable = document.createElement('table');
+        trialsTable.className = 'preview-table';
+        
+        // Create headers
+        const trialsHeader = document.createElement('thead');
+        trialsHeader.innerHTML = `
+          <tr>
+            <th>Monkey Name</th>
+            <th>Level</th>
+            <th>Try Number</th>
+            <th>Trial Number</th>
+            <th>Score</th>
+          </tr>
+        `;
+        trialsTable.appendChild(trialsHeader);
+        
+        // Create body
+        const trialsBody = document.createElement('tbody');
+        
+        // Extract trials data with filtering
+        const trialsMap = new Map();
+        
+        allMonkeyData.forEach(entry => {
+          if (entry.trial_number !== null) {
+            // Apply filters
+            if ((selectedLevel === 'all' || entry.level_number == selectedLevel) &&
+                (selectedTry === 'all' || entry.trial_try_number == selectedTry)) {
+              
+              const key = `${entry.monkey_name}-${entry.level_number}-${entry.trial_try_number}-${entry.trial_number}`;
+              
+              // Only add if key doesn't exist or this is a newer entry
+              if (!trialsMap.has(key)) {
+                trialsMap.set(key, {
+                  monkey_name: entry.monkey_name,
+                  level: entry.level_number,
+                  try_number: entry.trial_try_number || 1,
+                  trial_number: entry.trial_number,
+                  score: entry.trial_score
+                });
+              }
+            }
+          }
+        });
+        
+        // Sort trials by level, try number, and trial number
+        const sortedTrials = Array.from(trialsMap.values()).sort((a, b) => {
+          if (a.level !== b.level) return a.level - b.level;
+          if (a.try_number !== b.try_number) return a.try_number - b.try_number;
+          return a.trial_number - b.trial_number;
+        });
+
+        // Create rows for trials
+        sortedTrials.forEach(trial => {
+          // Verify trial number is within the expected range
+          const maxTrials = MAX_TRIALS[trial.level] || 10;
+          if (trial.trial_number <= maxTrials) {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+              <td>${trial.monkey_name}</td>
+              <td>${trial.level}</td>
+              <td>${trial.try_number}</td>
+              <td>${trial.trial_number}</td>
+              <td>${trial.score}</td>
+            `;
+            trialsBody.appendChild(row);
+          }
+        });
+        
+        trialsTable.appendChild(trialsBody);
+        return trialsTable;
+      }
+      
+      function populateMonkeyDropdown(monkeys) {
+        monkeySelect.innerHTML = '';
+        
+        if (!monkeys || monkeys.length === 0) {
+          monkeySelect.innerHTML = '<option value="">No monkeys found</option>';
+          showMessage('No monkeys found in the database', 'error');
+        } else {
+          monkeySelect.innerHTML = '<option value="">Select a monkey</option>';
+          monkeys.forEach(monkey => {
+            const option = document.createElement('option');
+            option.value = monkey.name;
+            option.textContent = monkey.name;
+            monkeySelect.appendChild(option);
+          });
+          hideMessage();
+        }
+      }
+      
+      // Export functions
+      function exportLevelsCSV() {
+        const monkeyName = monkeySelect.value;
+        const selectedLevel = levelFilter.value;
+        const selectedTry = tryFilter.value;
+        
+        try {
+          showMessage('Exporting levels data...', 'loading');
+          
+          // Filter the data based on selections
+          const levelEntries = new Map();
+          const levelsData = [];
+          
+          allMonkeyData.forEach(entry => {
+            if (entry.level_number !== null) {
+              // Apply filters
+              if ((selectedLevel === 'all' || entry.level_number == selectedLevel) &&
+                  (selectedTry === 'all' || entry.try_number == selectedTry)) {
+                
+                const key = `${entry.monkey_name}-${entry.level_number}-${entry.try_number}`;
+                
+                if (!levelEntries.has(key)) {
+                  levelEntries.set(key, true);
+                  
+                  levelsData.push({
+                    monkey_name: entry.monkey_name,
+                    level: entry.level_number,
+                    try_number: entry.try_number || 1,
+                    score: entry.level_score || 0,
+                    highest_score: entry.highest_score || 0
+                  });
+                }
+              }
+            }
+          });
+          
+          if (levelsData.length === 0) {
+            showMessage('No levels data to export with the current filters', 'error');
+            return;
+          }
+          
+          // Create CSV header
+          let csv = 'monkey_name,level,try_number,score,highest_score\n';
+          
+          // Add data rows
+          levelsData.forEach(row => {
+            csv += `${row.monkey_name},${row.level},${row.try_number},${row.score},${row.highest_score}\n`;
+          });
+          
+          // Generate filename based on filters
+          let filterText = '';
+          if (selectedLevel !== 'all') filterText += `_level${selectedLevel}`;
+          if (selectedTry !== 'all') filterText += `_try${selectedTry}`;
+          
+          // Download CSV
+          downloadCSV(csv, `${monkeyName}_levels${filterText}.csv`);
+          showMessage('Levels CSV exported successfully', 'success');
+        } catch (error) {
+          console.error('Error exporting levels CSV:', error);
+          showMessage('Error exporting levels CSV: ' + error.message, 'error');
+        }
+      }
+      
+      function exportTrialsCSV() {
+        const monkeyName = monkeySelect.value;
+        const selectedLevel = levelFilter.value;
+        const selectedTry = tryFilter.value;
+        
+        try {
+          showMessage('Exporting trials data...', 'loading');
+          
+          // Extract trials data with filtering
+          const trialsMap = new Map();
+          
+          allMonkeyData.forEach(entry => {
+            if (entry.trial_number !== null) {
+              // Apply filters
+              if ((selectedLevel === 'all' || entry.level_number == selectedLevel) &&
+                  (selectedTry === 'all' || entry.trial_try_number == selectedTry)) {
+                
+                const key = `${entry.monkey_name}-${entry.level_number}-${entry.trial_try_number}-${entry.trial_number}`;
+                
+                // Only add if key doesn't exist
+                if (!trialsMap.has(key)) {
+                  trialsMap.set(key, {
+                    monkey_name: entry.monkey_name,
+                    level: entry.level_number,
+                    try_number: entry.trial_try_number || 1,
+                    trial_number: entry.trial_number,
+                    score: entry.trial_score || 0
+                  });
+                }
+              }
+            }
+          });
+          
+          // Sort trials by level, try number, and trial number
+          const sortedTrials = Array.from(trialsMap.values())
+            .filter(trial => {
+              // Verify trial number is within the expected range
+              const maxTrials = MAX_TRIALS[trial.level] || 10;
+              return trial.trial_number <= maxTrials;
+            })
+            .sort((a, b) => {
+              if (a.level !== b.level) return a.level - b.level;
+              if (a.try_number !== b.try_number) return a.try_number - b.try_number;
+              return a.trial_number - b.trial_number;
+            });
+          
+          if (sortedTrials.length === 0) {
+            showMessage('No trials data to export with the current filters', 'error');
+            return;
+          }
+          
+          // Create CSV header
+          let csv = 'monkey_name,level,try_number,trial_number,score\n';
+          
+          // Add data rows
+          sortedTrials.forEach(row => {
+            csv += `${row.monkey_name},${row.level},${row.try_number},${row.trial_number},${row.score}\n`;
+          });
+          
+          // Generate filename based on filters
+          let filterText = '';
+          if (selectedLevel !== 'all') filterText += `_level${selectedLevel}`;
+          if (selectedTry !== 'all') filterText += `_try${selectedTry}`;
+          
+          // Download CSV
+          downloadCSV(csv, `${monkeyName}_trials${filterText}.csv`);
+          showMessage('Trials CSV exported successfully', 'success');
+        } catch (error) {
+          console.error('Error exporting trials CSV:', error);
+          showMessage('Error exporting trials CSV: ' + error.message, 'error');
+        }
+      }
+      
+      function exportLevel3Format() {
+        const monkeyName = monkeySelect.value;
+        const selectedLevel = "3"; // Always level 3 for this format
+        const selectedTry = tryFilter.value;
+        
+        try {
+          showMessage('Exporting Level 3 data in special format...', 'loading');
+          
+          // Extract Level 3 trials data with filtering
+          const trialsMap = new Map();
+          
+          allMonkeyData.forEach(entry => {
+            if (entry.trial_number !== null && entry.level_number == 3) {
+              // Apply try filter
+              if (selectedTry === 'all' || entry.trial_try_number == selectedTry) {
+                
+                const key = `${entry.monkey_name}-${entry.level_number}-${entry.trial_try_number}-${entry.trial_number}`;
+                
+                // Only add if key doesn't exist
+                if (!trialsMap.has(key)) {
+                  trialsMap.set(key, {
+                    monkey_name: entry.monkey_name,
+                    level: entry.level_number,
+                    try_number: entry.trial_try_number || 1,
+                    trial_number: entry.trial_number,
+                    score: entry.trial_score || 0
+                  });
+                }
+              }
+            }
+          });
+          
+          // Sort trials by try number and trial number
+          const sortedTrials = Array.from(trialsMap.values())
+            .filter(trial => {
+              // Verify trial number is within the expected range
+              return trial.trial_number <= MAX_TRIALS[3];
+            })
+            .sort((a, b) => {
+              if (a.try_number !== b.try_number) return a.try_number - b.try_number;
+              return a.trial_number - b.trial_number;
+            });
+          
+          if (sortedTrials.length === 0) {
+            showMessage('No Level 3 data to export', 'error');
+            return;
+          }
+          
+          // Process to special format
+          const formattedData = sortedTrials.map(trial => {
+            // Calculate tile coordinates for Level 3 (8x8 grid)
+            const gridPosition = trial.trial_number - 1;
+            const tileY = Math.floor(gridPosition / 8);
+            const tileX = gridPosition % 8;
+            
+            // Calculate chosen tile index (0-63)
+            const chosenTileIndex = tileY * 8 + tileX;
+            
+            // Reward value is normalized score (0-1)
+            const rewardValue = (trial.score / 5).toFixed(2);
+            
+            // Confidence level (5-7 random)
+            const confidenceLevel = 5 + (trial.trial_number % 3);
+            
+            return {
+              ParticipantID: trial.monkey_name,
+              Session: trial.try_number,
+              TrialNumber: trial.trial_number,
+              TileX: tileX,
+              TileY: tileY,
+              RewardValue: rewardValue,
+              ConfidenceLevel: confidenceLevel,
+              ChosenTileIndex: chosenTileIndex,
+              ClickNumber: trial.trial_number
+            };
+          });
+          
+          // Create CSV header
+          let csv = 'ParticipantID,Session,TrialNumber,TileX,TileY,RewardValue,ConfidenceLevel,ChosenTileIndex,ClickNumber\n';
+          
+          // Add data rows
+          formattedData.forEach(row => {
+            csv += `${row.ParticipantID},${row.Session},${row.TrialNumber},${row.TileX},${row.TileY},${row.RewardValue},${row.ConfidenceLevel},${row.ChosenTileIndex},${row.ClickNumber}\n`;
+          });
+          
+          // Generate filename with date and try filter
+          const date = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+          const tryFilterText = selectedTry !== 'all' ? `_try${selectedTry}` : '';
+          
+          // Download CSV
+          downloadCSV(csv, `${monkeyName}_Level3_Spatial_${date}${tryFilterText}.csv`);
+          showMessage('Level 3 special format data exported successfully', 'success');
+        } catch (error) {
+          console.error('Error exporting Level 3 format:', error);
+          showMessage('Error exporting Level 3 format: ' + error.message, 'error');
+        }
+      }
+      
+      function downloadCSV(csvContent, fileName) {
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', fileName);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+      
+      function showMessage(message, type) {
+        messageDiv.textContent = message;
+        messageDiv.className = `message ${type}`;
+        messageDiv.style.display = 'block';
+        
+        if (type !== 'loading') {
+          // Hide after 5 seconds for non-loading messages
+          setTimeout(() => {
+            messageDiv.style.display = 'none';
+          }, 5000);
+        }
+      }
+      
+      function hideMessage() {
+        messageDiv.style.display = 'none';
+      }
+    });
+  </script>
+</body>
+</html>

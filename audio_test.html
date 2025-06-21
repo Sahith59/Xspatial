@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Audio Test</title>
+</head>
+<body>
+    <h1>Audio Test</h1>
+    <button onclick="testSound()">Test Sound</button>
+    <button onclick="testSoundMultiple()">Test Sound 3 times</button>
+    <audio id="audioElement" src="correct.wav" preload="auto"></audio>
+    
+    <script>
+        function testSound() {
+            console.log('Testing single sound...');
+            const audio = new Audio('correct.wav');
+            audio.volume = 1.0;
+            audio.play().then(() => {
+                console.log('Sound played successfully!');
+            }).catch(error => {
+                console.error('Failed to play sound:', error);
+            });
+        }
+        
+        function testSoundMultiple() {
+            console.log('Testing multiple sounds...');
+            for (let i = 0; i < 3; i++) {
+                setTimeout(() => {
+                    const audio = new Audio('correct.wav');
+                    audio.volume = 1.0;
+                    console.log(`Playing sound ${i + 1}`);
+                    audio.play().then(() => {
+                        console.log(`Sound ${i + 1} played successfully!`);
+                    }).catch(error => {
+                        console.error(`Failed to play sound ${i + 1}:`, error);
+                    });
+                }, i * 700);
+            }
+        }
+        
+        // Test DOM element approach
+        function testDOMSound() {
+            const audio = document.getElementById('audioElement');
+            audio.currentTime = 0;
+            audio.play();
+        }
+        
+        console.log('Audio test page loaded');
+    </script>
+</body>
+</html>

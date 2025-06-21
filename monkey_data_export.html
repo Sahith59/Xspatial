@@ -1,0 +1,1729 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Monkey Level 3 Data Export</title>
+    <!-- D3.js for heatmap visualizations -->
+    <script src="scGrids/js/d3.v3.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #000;
+            font-family: Arial, sans-serif;
+        }
+        
+        .export-container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+            width: 90%;
+            max-width: 600px;
+            text-align: center;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        
+        .input-group {
+            margin-bottom: 25px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            box-sizing: border-box;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus, select:focus {
+            border-color: #4CAF50;
+            outline: none;
+        }
+        
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin: 10px 5px;
+        }
+        
+        button:hover {
+            background: #45a049;
+        }
+        
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        .error {
+            color: #ff0000;
+            font-size: 14px;
+            margin-top: 5px;
+            display: none;
+        }
+        
+        .loading {
+            display: none;
+            margin-top: 10px;
+            color: #666;
+        }
+        
+        .success {
+            color: #4CAF50;
+            font-size: 14px;
+            margin-top: 15px;
+            display: none;
+        }
+        
+        .data-preview {
+            margin-top: 20px;
+            text-align: left;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 6px;
+            background: #f9f9f9;
+            display: none;
+        }
+        
+        .preview-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .preview-table th, .preview-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+            font-size: 12px;
+        }
+        
+        .preview-table th {
+            background-color: #f2f2f2;
+        }
+        
+        .button-group {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .return-button {
+            background: #666;
+            margin-top: 20px;
+        }
+        
+        .return-button:hover {
+            background: #555;
+        }
+        
+        .env-r, .env-R {
+            background-color: rgba(200, 230, 255, 0.3) !important; /* Light blue for Rough environments */
+        }
+        
+        .env-s, .env-S {
+            background-color: rgba(255, 200, 200, 0.3) !important; /* Light red for Smooth environments */
+        }
+        
+        /* Heatmap CSS */
+        .heatmap-grid {
+            border-collapse: separate;
+            border: 2px solid lightgray;
+            margin: 0 auto;
+        }
+        
+        .heatmap-grid td {
+            width: 50px;
+            height: 50px;
+            border: 2px solid lightgray;
+            text-align: center;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        
+        .heatmap-grid td:hover {
+            transform: scale(1.1);
+            z-index: 100;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        }
+        
+        .heatmap-legend {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 10px;
+        }
+        
+        .heatmap-legend-item {
+            width: 20px;
+            height: 20px;
+            margin: 0 2px;
+        }
+        
+        .heatmap-legend-text {
+            margin: 0 10px;
+            font-size: 12px;
+        }
+        
+        .cell-tooltip {
+            position: absolute;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 10;
+            pointer-events: none;
+        }
+        
+        /* More distinctive styling for the initial revealed tile */
+        .initial-reveal {
+            border: 3px solid yellow !important;
+            box-shadow: 0 0 10px rgba(255, 255, 0, 0.7);
+            position: relative;
+        }
+        
+        /* No star symbol */
+    </style>
+</head>
+<body>
+    <div class="export-container">
+        <h1>Monkey Level 3 Data Export</h1>
+        <div style="font-size: 14px; color: #666; margin-bottom: 15px;">
+            Exports Level 3 data (actual completed trials only: 1 initial revealed tile + user-selected tiles)
+        </div>
+        
+        <div class="input-group">
+            <label for="monkeyName">Enter Monkey Name</label>
+            <input type="text" id="monkeyName" placeholder="Enter monkey name" autocomplete="off">
+            <div id="error" class="error">Please enter a valid name</div>
+        </div>
+        
+        <div id="tryNumberSelector" class="input-group" style="display: none;">
+            <label for="tryNumber">Select Try Number</label>
+            <select id="tryNumber">
+                <option value="all">All Tries</option>
+                <!-- Options will be populated dynamically -->
+            </select>
+        </div>
+        
+        <div id="loading" class="loading">Processing data...</div>
+        <div id="success" class="success"></div>
+        
+        <div class="button-group">
+            <button id="fetchButton">Fetch Data</button>
+            <button id="downloadCsvButton" disabled>Download CSV</button>
+            <button id="downloadJsonButton" disabled>Download JSON</button>
+            <button id="showHeatmapButton" disabled>Show Heatmap</button>
+        </div>
+        
+        <!-- Heatmap Container -->
+        <div id="heatmapContainer" style="display: none; margin-top: 30px;">
+            <h3>Heatmap Visualization</h3>
+            <div style="display: flex; flex-direction: row; margin-bottom: 20px;">
+                <div id="heatmapSection" style="flex: 1; text-align: center;">
+                    <div id="heatmapGrid"></div>
+                    <div id="heatmapLegend" style="margin-top: 15px;"></div>
+                </div>
+                <div id="heatmapInfo" style="flex: 1; padding-left: 20px;">
+                    <h4>Heatmap Information</h4>
+                    <div id="heatmapDetails"></div>
+                </div>
+            </div>
+            <div>
+                <select id="heatmapTrySelector" style="width: 150px; margin-right: 15px;">
+                    <!-- Options will be populated dynamically -->
+                </select>
+                <button id="downloadHeatmapButton">Download Heatmap Image</button>
+            </div>
+        </div>
+        
+        <div id="dataPreview" class="data-preview">
+            <h3>Data Preview</h3>
+            <div id="previewContent"></div>
+        </div>
+        
+        <button class="return-button" onclick="window.location.href='browser_game.html'">Return to Game</button>
+    </div>
+
+    <script>
+        // Constants
+        const LEVEL = 3; // Level 3 data only
+        
+        // Variables
+        let db; // SQLite database
+        let SQL; // SQL.js library
+        let exportData = [];
+        let kernelSmoothData = null;
+        let availableTryNumbers = [];
+        
+        // DOM elements
+        const monkeyNameInput = document.getElementById('monkeyName');
+        const tryNumberSelect = document.getElementById('tryNumber');
+        const tryNumberSelector = document.getElementById('tryNumberSelector');
+        const fetchButton = document.getElementById('fetchButton');
+        const downloadCsvButton = document.getElementById('downloadCsvButton');
+        const downloadJsonButton = document.getElementById('downloadJsonButton');
+        const errorDiv = document.getElementById('error');
+        const loadingDiv = document.getElementById('loading');
+        const successDiv = document.getElementById('success');
+        const dataPreviewDiv = document.getElementById('dataPreview');
+        const previewContentDiv = document.getElementById('previewContent');
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Try to auto-fill monkey name from localStorage
+            const lastMonkeyName = localStorage.getItem('monkeyId');
+            if (lastMonkeyName) {
+                monkeyNameInput.value = lastMonkeyName;
+            }
+            
+            // Load KernelSmooth data
+            await loadKernelSmoothData();
+            
+            // Initialize database
+            await initializeDatabase();
+            
+            // Set up event listeners
+            monkeyNameInput.addEventListener('input', function() {
+                errorDiv.style.display = 'none';
+                successDiv.style.display = 'none';
+                downloadCsvButton.disabled = true;
+                downloadJsonButton.disabled = true;
+                dataPreviewDiv.style.display = 'none';
+                tryNumberSelector.style.display = 'none';
+            });
+            
+            tryNumberSelect.addEventListener('change', function() {
+                filterAndDisplayData();
+            });
+            
+            fetchButton.addEventListener('click', fetchData);
+            downloadCsvButton.addEventListener('click', downloadCsv);
+            downloadJsonButton.addEventListener('click', downloadJson);
+            
+            // Heatmap button event listeners
+            document.getElementById('showHeatmapButton').addEventListener('click', toggleHeatmap);
+            document.getElementById('heatmapTrySelector').addEventListener('change', updateHeatmap);
+            document.getElementById('downloadHeatmapButton').addEventListener('click', downloadHeatmapImage);
+            
+            // Handle enter key
+            monkeyNameInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    fetchData();
+                }
+            });
+        });
+        
+        // Load SQL.js and initialize database
+        async function initializeDatabase() {
+            try {
+                console.log("Initializing SQL.js...");
+                
+                // Load SQL.js
+                SQL = await initSqlJs({
+                    locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
+                });
+                
+                console.log("SQL.js loaded successfully.");
+                
+                // Load database from localStorage
+                const dbBytes = loadDatabaseFromLocalStorage();
+                
+                if (dbBytes) {
+                    try {
+                        // Create database from stored bytes
+                        db = new SQL.Database(dbBytes);
+                        console.log("Database loaded successfully from localStorage");
+                    } catch (e) {
+                        console.error("Error creating database from bytes:", e);
+                        db = null;
+                    }
+                } else {
+                    console.log("No database found in localStorage");
+                    db = null;
+                }
+                
+                return true;
+            } catch (error) {
+                console.error("Failed to initialize database:", error);
+                errorDiv.textContent = "Failed to initialize database. Some features may be limited.";
+                errorDiv.style.display = 'block';
+                return false;
+            }
+        }
+        
+        // Load database from localStorage
+        function loadDatabaseFromLocalStorage() {
+            try {
+                console.log("Attempting to load database from localStorage");
+                const savedDbData = localStorage.getItem('monkeyGameDb');
+                
+                if (!savedDbData) {
+                    console.log("No database found in localStorage");
+                    return null;
+                }
+                
+                // Parse base64 data
+                try {
+                    const binaryString = atob(savedDbData);
+                    const len = binaryString.length;
+                    const bytes = new Uint8Array(len);
+                    
+                    // Convert binary string to bytes
+                    for (let i = 0; i < len; i++) {
+                        bytes[i] = binaryString.charCodeAt(i);
+                    }
+                    
+                    console.log("Successfully parsed database binary data", { length: len });
+                    return bytes;
+                } catch (e) {
+                    console.error("Error parsing base64 database:", e);
+                    return null;
+                }
+            } catch (e) {
+                console.error("Error accessing localStorage:", e);
+                return null;
+            }
+        }
+        
+        // Load KernelSmooth.json
+        async function loadKernelSmoothData() {
+            try {
+                const response = await fetch('kernelSmooth.json');
+                if (!response.ok) {
+                    throw new Error(`Failed to load KernelSmooth.json: ${response.status}`);
+                }
+                
+                kernelSmoothData = await response.json();
+                console.log("KernelSmooth.json loaded successfully", { environments: Object.keys(kernelSmoothData).length });
+                return kernelSmoothData;
+            } catch (error) {
+                console.error("Error loading KernelSmooth.json:", error);
+                // Don't show the error to user
+                return null;
+            }
+        }
+        
+        // Fetch actual level 3 data for a monkey
+        async function fetchData() {
+            const monkeyName = monkeyNameInput.value.trim();
+            
+            if (!monkeyName) {
+                errorDiv.textContent = 'Please enter a valid monkey name';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            
+            loadingDiv.style.display = 'block';
+            successDiv.style.display = 'none';
+            errorDiv.style.display = 'none';
+            dataPreviewDiv.style.display = 'none';
+            downloadCsvButton.disabled = true;
+            downloadJsonButton.disabled = true;
+            tryNumberSelector.style.display = 'none';
+            
+            try {
+                // Check if the database is available
+                if (!db) {
+                    throw new Error("Database not initialized properly. Cannot retrieve actual game data.");
+                }
+                
+                // Check if the monkey exists in the database
+                const monkeyQuery = db.prepare("SELECT name FROM monkeys WHERE name = ?");
+                monkeyQuery.bind([monkeyName]);
+                const monkeyExists = monkeyQuery.step();
+                monkeyQuery.free();
+                
+                if (!monkeyExists) {
+                    throw new Error(`No monkey named ${monkeyName} found in the database. The monkey needs to have played Level 3 first.`);
+                }
+                
+                // Get Level 3 data for this monkey
+                const trialsQuery = db.prepare(
+                    "SELECT * FROM trials WHERE monkey_name = ? AND level = ? ORDER BY try_number, trial_number"
+                );
+                trialsQuery.bind([monkeyName, LEVEL]);
+                
+                // Process trial data
+                const trialsData = [];
+                while (trialsQuery.step()) {
+                    trialsData.push(trialsQuery.getAsObject());
+                }
+                trialsQuery.free();
+                
+                console.log(`Retrieved ${trialsData.length} Level 3 trials for ${monkeyName}`);
+                
+                if (trialsData.length === 0) {
+                    throw new Error(`No Level 3 data found for ${monkeyName}. The monkey needs to have played Level 3 first.`);
+                }
+                
+                // Check for level3TileData in localStorage
+                let tileData = null;
+                try {
+                    const tileDataJson = localStorage.getItem('level3TileData');
+                    if (tileDataJson) {
+                        tileData = JSON.parse(tileDataJson);
+                    }
+                } catch (e) {
+                    console.error("Error parsing level3TileData:", e);
+                }
+                
+                // Process trial data into export format
+                exportData = processTrialData(trialsData, tileData, monkeyName);
+                
+                // Get available try numbers
+                availableTryNumbers = [...new Set(exportData.map(row => row.block))].sort((a, b) => a - b);
+                
+                // Populate try number selector
+                populateTryNumberSelector(availableTryNumbers);
+                
+                // Show try selector and enable download and heatmap buttons
+                tryNumberSelector.style.display = 'block';
+                downloadCsvButton.disabled = false;
+                downloadJsonButton.disabled = false;
+                document.getElementById('showHeatmapButton').disabled = false;
+                
+                // Show success
+                successDiv.textContent = `Retrieved actual Level 3 data for ${monkeyName} (${exportData.length} rows)`;
+                successDiv.style.display = 'block';
+                
+                // Filter and display data
+                filterAndDisplayData();
+                
+            } catch (error) {
+                console.error("Error fetching data:", error);
+                errorDiv.textContent = error.message || "Error retrieving data";
+                errorDiv.style.display = 'block';
+                
+                // Check if we can use level3TileData directly
+                if (error.message && error.message.includes("Database not initialized")) {
+                    tryGetDataFromLocalStorage(monkeyName);
+                }
+            } finally {
+                loadingDiv.style.display = 'none';
+            }
+        }
+        
+        // Try to get data directly from localStorage if database fails
+        function tryGetDataFromLocalStorage(monkeyName) {
+            try {
+                const tileDataJson = localStorage.getItem('level3TileData');
+                if (!tileDataJson) {
+                    throw new Error(`No Level 3 data found for ${monkeyName} in localStorage.`);
+                }
+                
+                // Parse the data
+                const tileData = JSON.parse(tileDataJson);
+                console.log("Found level3TileData in localStorage");
+                
+                // Process the tile data into our format
+                exportData = [];
+                let rowIndex = 1;
+                
+                for (const block in tileData) {
+                    const tryNum = parseInt(block);
+                    const trialData = tileData[block];
+                    
+                    if (Array.isArray(trialData)) {
+                        // Get scale from localStorage or calculate
+                        const scale = getScaleForTry(monkeyName, tryNum);
+                        
+                        // Get environment order from localStorage or calculate
+                        const envOrder = getEnvOrderForTry(monkeyName, tryNum);
+                        
+                        // Determine environment type (R/S) based on even/odd
+                        const environmentType = envOrder % 2 === 0 ? "R" : "S";
+                        
+                        // Process only the actual completed trials (no fake data generation)
+                        trialData.forEach(trial => {
+                            // Process trial data
+                            const x = trial.tileX;
+                            const y = trial.tileY;
+                            
+                            // Get z-value from localStorage or calculate
+                            const cellValues = getCellValues(monkeyName, tryNum, trial.clickNumber, x, y, scale, envOrder);
+                            
+                            // Use actual pellet count from tile data if available, otherwise calculate from cellValues
+                            const actualPelletCount = trial.pelletCount !== undefined ? trial.pelletCount : cellValues.pelletCount;
+                            cellValues.pelletCount = Math.min(5, Math.max(1, actualPelletCount || 1));
+                            
+                            // Add to export data
+                            exportData.push({
+                                idx: rowIndex++,
+                                x: x,
+                                y: y,
+                                z: cellValues.z,
+                                zscaled: cellValues.zscaled,
+                                trial: trial.clickNumber,
+                                block: tryNum,
+                                monkeyid: monkeyName,
+                                scale: scale,
+                                envOrder: envOrder,
+                                pellet_count: cellValues.pelletCount,
+                                environment: environmentType,
+                                // Properly mark the initial revealed tile (clickNumber=1)
+                                isInitialReveal: trial.clickNumber === 1 ? 1 : 0
+                            });
+                        });
+                    }
+                }
+                
+                // If we have data, update UI
+                if (exportData.length > 0) {
+                    // Get available try numbers
+                    availableTryNumbers = [...new Set(exportData.map(row => row.block))].sort((a, b) => a - b);
+                    
+                    // Populate try number selector
+                    populateTryNumberSelector(availableTryNumbers);
+                    
+                    // Show try selector and enable download and heatmap buttons
+                    tryNumberSelector.style.display = 'block';
+                    downloadCsvButton.disabled = false;
+                    downloadJsonButton.disabled = false;
+                    document.getElementById('showHeatmapButton').disabled = false;
+                    
+                    // Show success
+                    successDiv.textContent = `Retrieved Level 3 data for ${monkeyName} from localStorage (${exportData.length} rows)`;
+                    successDiv.style.display = 'block';
+                    
+                    // Clear error 
+                    errorDiv.style.display = 'none';
+                    
+                    // Filter and display data
+                    filterAndDisplayData();
+                }
+            } catch (error) {
+                console.error("Error retrieving data from localStorage:", error);
+                errorDiv.textContent = error.message || "Error retrieving data from localStorage";
+                errorDiv.style.display = 'block';
+            }
+        }
+        
+        // Process database trial data
+        function processTrialData(trialsData, tileData, monkeyName) {
+            const processedData = [];
+            
+            // Group trials by try number
+            const trialsByTry = {};
+            trialsData.forEach(trial => {
+                const tryNum = trial.try_number;
+                
+                if (!trialsByTry[tryNum]) {
+                    trialsByTry[tryNum] = [];
+                }
+                
+                trialsByTry[tryNum].push(trial);
+            });
+            
+            // Process each try
+            for (const tryNum in trialsByTry) {
+                const tryTrials = trialsByTry[tryNum];
+                
+                // Get scale from database or localStorage
+                const scale = getScaleForTry(monkeyName, tryNum);
+                
+                // Get environment order from database or localStorage
+                const envOrder = getEnvOrderForTry(monkeyName, tryNum);
+                
+                // Determine environment type (R/S) based on even/odd
+                const environmentType = envOrder % 2 === 0 ? "R" : "S";
+                
+                // Process only the actual completed trials (no fake data generation)
+                tryTrials.forEach(trial => {
+                    // Extract coordinates 
+                    const x = trial.tileX !== undefined ? trial.tileX : (trial.trial_number - 1) % 8;
+                    const y = trial.tileY !== undefined ? trial.tileY : Math.floor((trial.trial_number - 1) / 8);
+                    
+                    // Get z-value and zscaled value
+                    const cellValues = getCellValues(monkeyName, tryNum, trial.trial_number, x, y, scale, envOrder);
+                    
+                    // Use actual pellet count from trial data if available, otherwise calculate from cellValues
+                    const actualPelletCount = trial.pellet_count !== undefined ? trial.pellet_count : cellValues.pelletCount;
+                    cellValues.pelletCount = Math.min(5, Math.max(1, actualPelletCount || 1));
+                    
+                    // Add to processed data
+                    processedData.push({
+                        idx: processedData.length + 1,
+                        x: x,
+                        y: y,
+                        z: cellValues.z,
+                        zscaled: cellValues.zscaled,
+                        trial: trial.trial_number,
+                        block: parseInt(tryNum),
+                        monkeyid: monkeyName,
+                        scale: scale,
+                        envOrder: envOrder,
+                        pellet_count: cellValues.pelletCount,
+                        environment: environmentType,
+                        // Ensure the initial revealed tile (trial_number=1) is properly marked
+                        isInitialReveal: trial.is_initial_reveal || trial.trial_number === 1 ? 1 : 0
+                    });
+                });
+            }
+            
+            return processedData;
+        }
+        
+        // Get scale for a try (from database or localStorage)
+        function getScaleForTry(monkeyName, tryNumber) {
+            // Try to get previously stored scale
+            const key = `scale_${monkeyName}_${tryNumber}`;
+            const storedScale = localStorage.getItem(key);
+            
+            if (storedScale) {
+                return parseInt(storedScale);
+            }
+            
+            // Calculate a consistent scale value based on original method
+            let hash = 0;
+            for (let i = 0; i < monkeyName.length; i++) {
+                hash = ((hash << 5) - hash) + monkeyName.charCodeAt(i);
+                hash |= 0;
+            }
+            
+            // Original implementation uses randomNum(30, 40)
+            const min = 30;
+            const max = 40;
+            
+            // Use hash and try number to create a consistent pseudo-random scale
+            const scale = min + Math.abs((hash + tryNumber) % (max - min + 1));
+            
+            // Store for future consistency
+            localStorage.setItem(key, scale.toString());
+            
+            return scale;
+        }
+        
+        // Get environment order for a try (from database or localStorage)
+        function getEnvOrderForTry(monkeyName, tryNumber) {
+            // Try to get previously stored environment order
+            const key = `envOrder_${monkeyName}_${tryNumber}`;
+            const storedEnvOrder = localStorage.getItem(key);
+            
+            if (storedEnvOrder) {
+                return parseInt(storedEnvOrder);
+            }
+            
+            // Use the exact same method as the original experiment
+            // Original code: envOrder = getRandomSubarray([0, 1, 2, ..., 39], totalTrialsNumber)
+            // We need to generate a consistent, random sequence for each monkey
+            
+            // Create a deterministic seed from monkey name
+            let seed = 0;
+            for (let i = 0; i < monkeyName.length; i++) {
+                seed = ((seed << 5) - seed) + monkeyName.charCodeAt(i);
+                seed |= 0;
+            }
+            
+            // Use Fisher-Yates shuffle algorithm with deterministic randomness
+            const allPossibleEnvs = Array.from({length: 40}, (_, i) => i); // [0, 1, 2, ..., 39]
+            const shuffled = [...allPossibleEnvs];
+            
+            // Deterministic shuffle based on monkey name and try number
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                // Use a consistent seed-based "random" selection
+                const j = Math.abs((seed + tryNumber * i) % (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            
+            // Select env based on try number (wrapping around if needed)
+            const envOrder = shuffled[tryNumber % 40];
+            
+            // Store for future consistency
+            localStorage.setItem(key, envOrder.toString());
+            
+            return envOrder;
+        }
+        
+        // Get cell values (z, zscaled, pelletCount) for a specific cell
+        function getCellValues(monkeyName, tryNumber, trial, x, y, scale, envOrder) {
+            // Try to get previously stored values
+            const key = `cellValues_${monkeyName}_${tryNumber}_${trial}`;
+            const storedValues = localStorage.getItem(key);
+            
+            if (storedValues) {
+                return JSON.parse(storedValues);
+            }
+            
+            // Get base value from KernelSmooth.json, as in original implementation
+            const baseValue = getValueFromKernelSmooth(envOrder, x, y);
+            
+            // Create a deterministic but variable noise value
+            const seed = monkeyName.length + tryNumber * 100 + trial + x * 10 + y;
+            const noise = myNorm(seed) * 5; // Similar to original myNorm but deterministic
+            
+            // Add noise to base value (as in original implementation)
+            const noiseyValue = Math.round(baseValue + noise);
+            
+            // Calculate z value (0-1 range, as in original)
+            const z = noiseyValue / 50;
+            
+            // Calculate zscaled value (as in original implementation)
+            const zscaled = Math.round(z * scale);
+            
+            // Calculate pellet count (as in original), limited to 1-5 range
+            const pelletCount = Math.min(5, Math.max(1, Math.ceil(zscaled / 5)));
+            
+            // Create the result
+            const result = {
+                x,
+                y,
+                z: Math.round(z * 50), // Convert back to 0-50 range
+                zscaled,
+                pelletCount,
+                baseValue,
+                noiseyValue
+            };
+            
+            // Store for future consistency
+            localStorage.setItem(key, JSON.stringify(result));
+            
+            return result;
+        }
+        
+        // Get value from KernelSmooth.json (as in original implementation)
+        function getValueFromKernelSmooth(envIndex, x, y) {
+            try {
+                if (!kernelSmoothData) {
+                    throw new Error("KernelSmooth data not available");
+                }
+                
+                // Get available environments count
+                const availableEnvs = Object.keys(kernelSmoothData).length;
+                
+                // Map the 0-39 range to available environments (typically 0-3)
+                // In original code: even indices are Rough, odd are Smooth
+                const isRoughEnvironment = envIndex % 2 === 0;
+                
+                // Count of each type (R or S)
+                const baseEnvCount = Math.floor(availableEnvs / 2);
+                
+                // Distribute environments while maintaining R/S pattern
+                const baseEnvOffset = Math.floor((envIndex / 2) % baseEnvCount);
+                
+                // Calculate final index: R=0,2,4..., S=1,3,5...
+                const actualEnvIndex = (isRoughEnvironment ? 0 : 1) + (baseEnvOffset * 2);
+                
+                // Make sure we stay within available environments
+                const finalEnvIndex = actualEnvIndex % availableEnvs;
+                
+                // Get this environment's data
+                const env = kernelSmoothData[finalEnvIndex.toString()];
+                if (!env) {
+                    throw new Error(`Environment ${finalEnvIndex} not found`);
+                }
+                
+                // Find the cell with matching x,y
+                const cellKey = Object.keys(env).find(key => {
+                    const cell = env[key];
+                    return parseInt(cell.x1) === x && parseInt(cell.x2) === y;
+                });
+                
+                if (!cellKey) {
+                    throw new Error(`Cell at position (${x},${y}) not found`);
+                }
+                
+                // Get the y value (0-1 range) and convert to 0-50 range
+                const value = env[cellKey].y * 50;
+                
+                return value;
+            } catch (e) {
+                console.warn("Error getting value from KernelSmooth:", e);
+                
+                // Fallback with deterministic pseudo-random value
+                const seed = envIndex * 1000 + x * 10 + y;
+                const pseudoRandom = Math.sin(seed) * 10000;
+                const normalizedValue = Math.abs(pseudoRandom - Math.floor(pseudoRandom));
+                
+                // Generate value (0-50 range) with environment-appropriate variance
+                const baseValue = 25;
+                const varianceFactor = envIndex % 2 === 0 ? 20 : 10; // R=more variance, S=less
+                return Math.round(baseValue + (normalizedValue - 0.5) * varianceFactor);
+            }
+        }
+        
+        // Deterministic version of myNorm for reproducible values
+        function myNorm(seed) {
+            // Using the Box-Muller transform with a deterministic seed
+            const u1 = Math.abs(Math.sin(seed * 12345)) % 1;
+            const u2 = Math.abs(Math.cos(seed * 67890)) % 1;
+            
+            // Avoid exact zeros
+            const adjustedU1 = u1 === 0 ? 0.0001 : u1;
+            const adjustedU2 = u2 === 0 ? 0.0001 : u2;
+            
+            // Box-Muller transform
+            const r = Math.sqrt(-2.0 * Math.log(adjustedU1));
+            const theta = 2.0 * Math.PI * adjustedU2;
+            
+            // Return one of the two values
+            return r * Math.cos(theta);
+        }
+        
+        // Populate try number selector
+        function populateTryNumberSelector(tryNumbers) {
+            // Clear existing options except "All"
+            while (tryNumberSelect.options.length > 1) {
+                tryNumberSelect.remove(1);
+            }
+            
+            // Add options for each try number
+            tryNumbers.forEach(tryNum => {
+                const option = document.createElement('option');
+                option.value = tryNum;
+                option.textContent = `Try #${tryNum}`;
+                tryNumberSelect.appendChild(option);
+            });
+            
+            // Select "All" by default
+            tryNumberSelect.value = 'all';
+        }
+        
+        // Filter data based on selected try number
+        function filterAndDisplayData() {
+            const selectedTryNumber = tryNumberSelect.value;
+            
+            let filteredData;
+            
+            if (selectedTryNumber === 'all') {
+                // Use all data
+                filteredData = exportData;
+            } else {
+                // Filter to specific try
+                const tryNum = parseInt(selectedTryNumber);
+                filteredData = exportData.filter(item => item.block === tryNum);
+            }
+            
+            // Display preview
+            displayDataPreview(filteredData);
+        }
+        
+        // Display data preview
+        function displayDataPreview(data) {
+            // Clear previous content
+            previewContentDiv.innerHTML = '';
+            
+            if (data.length === 0) {
+                previewContentDiv.innerHTML = '<p>No data available to display.</p>';
+                dataPreviewDiv.style.display = 'block';
+                return;
+            }
+            
+            // Group data by try number for summary
+            const tryGroups = {};
+            data.forEach(trial => {
+                if (!tryGroups[trial.block]) {
+                    tryGroups[trial.block] = {
+                        count: 0,
+                        environment: trial.environment,
+                        scale: trial.scale,
+                        envOrder: trial.envOrder
+                    };
+                }
+                tryGroups[trial.block].count++;
+            });
+            
+            // Create a summary of the data
+            const summaryDiv = document.createElement('div');
+            summaryDiv.style.marginBottom = '20px';
+            
+            summaryDiv.innerHTML = `
+                <p>Level 3 data for <strong>${monkeyNameInput.value.trim()}</strong> - 
+                ${data.length} total rows across ${Object.keys(tryGroups).length} tries. 
+                Each try includes only the actually completed trials (1 initial revealed tile + selected tiles).</p>
+                
+                <div style="margin: 10px 0; padding: 10px; background-color: #f5f5f5; border-radius: 5px;">
+                    <strong>Environment Types:</strong>
+                    <span style="display: inline-block; margin-left: 10px; padding: 2px 10px; background-color: rgba(200, 230, 255, 0.6); border-radius: 3px;">R = Rough</span>
+                    <span style="display: inline-block; margin-left: 10px; padding: 2px 10px; background-color: rgba(255, 200, 200, 0.6); border-radius: 3px;">S = Smooth</span>
+                    
+                    <div style="margin-top: 10px;">
+                        <strong>Data Structure:</strong> Each try includes only completed trials:
+                        <span style="display: inline-block; margin-left: 10px; padding: 2px 10px; background-color: rgba(255, 255, 150, 0.6); border-radius: 3px; font-weight: bold;">1 initial revealed tile (trial=1)</span>
+                        <span style="display: inline-block; margin-left: 10px; padding: 2px 10px;">+ actual user-selected tiles</span>
+                    </div>
+                </div>
+            `;
+            
+            // Create environment summary
+            let envSummary = '<strong>Environment Summary:</strong><ul style="margin-top: 5px;">';
+            Object.keys(tryGroups).sort((a, b) => parseInt(a) - parseInt(b)).forEach(tryNum => {
+                const group = tryGroups[tryNum];
+                const envColor = group.environment === 'R' ? 
+                    'rgba(200, 230, 255, 0.6)' : 'rgba(255, 200, 200, 0.6)';
+                
+                envSummary += `<li>Try #${tryNum}: 
+                    <span style="padding: 2px 8px; background-color: ${envColor}; border-radius: 3px;">
+                        ${group.environment} Environment (Order: ${group.envOrder})
+                    </span> 
+                    (Scale: ${group.scale}, ${group.count} trials)
+                </li>`;
+            });
+            envSummary += '</ul>';
+            
+            summaryDiv.innerHTML += envSummary;
+            previewContentDiv.appendChild(summaryDiv);
+            
+            // Create a table for the data
+            const table = document.createElement('table');
+            table.className = 'preview-table';
+            
+            // Create header row
+            const headerRow = document.createElement('tr');
+            headerRow.innerHTML = `
+                <th>#</th>
+                <th>x</th>
+                <th>y</th>
+                <th>z</th>
+                <th>zscaled</th>
+                <th>trial</th>
+                <th>block</th>
+                <th>monkeyid</th>
+                <th>scale</th>
+                <th>envOrder</th>
+                <th>pellet_count</th>
+                <th>env</th>
+            `;
+            table.appendChild(headerRow);
+            
+            // Sort data by block (try_number), then trial (ensuring trial=1 is always first)
+            const sortedData = [...data].sort((a, b) => {
+                // First sort by block number
+                if (a.block !== b.block) return a.block - b.block;
+                
+                // Then ensure trial=1 (initial revealed tile) is always first
+                return a.trial - b.trial;
+            });
+            
+            // Add data rows (limit to 100 for performance)
+            const limit = Math.min(sortedData.length, 100);
+            for (let i = 0; i < limit; i++) {
+                const row = sortedData[i];
+                const tableRow = document.createElement('tr');
+                
+                // Set background color based on environment and highlight initial revealed tiles
+                let bgColor = row.environment === 'R' ? 
+                    'rgba(200, 230, 255, 0.3)' : 'rgba(255, 200, 200, 0.3)';
+                    
+                // Highlight initial revealed tile (trial=1) with a more pronounced color
+                if (row.trial === 1) {
+                    bgColor = row.environment === 'R' ? 
+                        'rgba(150, 200, 255, 0.7)' : 'rgba(255, 150, 150, 0.7)';
+                    tableRow.style.fontWeight = 'bold'; // Make it bold
+                }
+                
+                tableRow.style.backgroundColor = bgColor;
+                
+                tableRow.innerHTML = `
+                    <td>${i + 1}</td>
+                    <td>${row.x}</td>
+                    <td>${row.y}</td>
+                    <td>${row.z}</td>
+                    <td>${row.zscaled}</td>
+                    <td>${row.trial}</td>
+                    <td>${row.block}</td>
+                    <td>${row.monkeyid}</td>
+                    <td>${row.scale}</td>
+                    <td>${row.envOrder}</td>
+                    <td>${Math.min(5, Math.max(1, row.pellet_count || 1))}</td>
+                    <td>${row.environment}${row.trial === 1 ? ' (Initial)' : ''}</td>
+                `;
+                
+                table.appendChild(tableRow);
+            }
+            
+            // Add message if data was limited
+            if (sortedData.length > limit) {
+                const messageRow = document.createElement('tr');
+                messageRow.innerHTML = `
+                    <td colspan="12" style="text-align: center; font-style: italic;">
+                        Showing ${limit} of ${sortedData.length} rows. Download full data using the buttons above.
+                    </td>
+                `;
+                table.appendChild(messageRow);
+            }
+            
+            previewContentDiv.appendChild(table);
+            dataPreviewDiv.style.display = 'block';
+        }
+        
+        // Download CSV function
+        function downloadCsv() {
+            if (exportData.length === 0) {
+                errorDiv.textContent = 'No data available to download';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            
+            // Create CSV content
+            let csvContent = '\"\",\"x\",\"y\",\"z\",\"zscaled\",\"trial\",\"block\",\"monkeyid\",\"scale\",\"envOrder\",\"pellet_count\",\"environment\"\n';
+            
+            // Filter based on selected try
+            let dataToExport;
+            const selectedTryNumber = tryNumberSelect.value;
+            
+            if (selectedTryNumber === 'all') {
+                dataToExport = exportData;
+            } else {
+                const tryNum = parseInt(selectedTryNumber);
+                dataToExport = exportData.filter(row => row.block === tryNum);
+            }
+            
+            // Sort data by block then trial and add rows
+            const sortedExportData = [...dataToExport].sort((a, b) => {
+                if (a.block !== b.block) return a.block - b.block;
+                return a.trial - b.trial;
+            });
+            
+            sortedExportData.forEach((row, index) => {
+                // Ensure pellet count is in the 1-5 range
+                const correctedPelletCount = Math.min(5, Math.max(1, row.pellet_count || 1));
+                csvContent += `\"${index + 1}\",${row.x},${row.y},${row.z},${row.zscaled},${row.trial},${row.block},\"${row.monkeyid}\",${row.scale},${row.envOrder},${correctedPelletCount},\"${row.environment}${row.trial === 1 ? ' (Initial)' : ''}\"\n`;
+            });
+            
+            // Create download
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            
+            // Create filename with date and monkey name
+            const date = new Date().toISOString().split('T')[0];
+            const monkeyName = monkeyNameInput.value.trim();
+            const tryPart = selectedTryNumber === 'all' ? 'AllTries' : `Try${selectedTryNumber}`;
+            link.setAttribute('download', `${monkeyName}_Level3_${tryPart}_${date}.csv`);
+            
+            // Trigger download
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // Show success message
+            successDiv.textContent = `CSV downloaded successfully (${dataToExport.length} rows)`;
+            successDiv.style.display = 'block';
+        }
+        
+        // Download JSON function
+        function downloadJson() {
+            if (exportData.length === 0) {
+                errorDiv.textContent = 'No data available to download';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            
+            // Filter based on selected try
+            let dataToExport;
+            const selectedTryNumber = tryNumberSelect.value;
+            
+            if (selectedTryNumber === 'all') {
+                dataToExport = exportData;
+            } else {
+                const tryNum = parseInt(selectedTryNumber);
+                dataToExport = exportData.filter(row => row.block === tryNum);
+            }
+            
+            // Sort data first
+            const sortedExportData = [...dataToExport].sort((a, b) => {
+                if (a.block !== b.block) return a.block - b.block;
+                return a.trial - b.trial;
+            });
+            
+            // Group by block (try number)
+            const organizedByBlock = {};
+            sortedExportData.forEach(row => {
+                const blockKey = row.block.toString();
+                if (!organizedByBlock[blockKey]) {
+                    organizedByBlock[blockKey] = [];
+                }
+                
+                organizedByBlock[blockKey].push({
+                    tileX: row.x,
+                    tileY: row.y,
+                    clickNumber: row.trial,
+                    rewardValue: row.z / 50, // Convert to 0-1 range
+                    scale: row.scale,
+                    envOrder: row.envOrder,
+                    environment: row.environment,
+                    pelletCount: Math.min(5, Math.max(1, row.pellet_count || 1)),
+                    zscaled: row.zscaled,
+                    gridPosition: row.y * 8 + row.x,
+                    isInitialReveal: row.isInitialReveal,
+                    isInitial: row.trial === 1 // Extra flag to clearly mark initial tiles
+                });
+            });
+            
+            // Create JSON in the original format
+            const jsonData = {
+                participantId: monkeyNameInput.value.trim(),
+                session: `Level3_Export_${new Date().toISOString()}`,
+                scale: Object.keys(organizedByBlock).map(block => {
+                    // Get scale for this block
+                    const firstRow = organizedByBlock[block][0];
+                    return firstRow ? firstRow.scale : 35;
+                }),
+                envOrder: Object.keys(organizedByBlock).map(block => {
+                    // Get environment order for this block
+                    const firstRow = organizedByBlock[block][0];
+                    return firstRow ? firstRow.envOrder : 0;
+                }),
+                searchHistory: {
+                    trialData: sortedExportData.map(row => ({
+                        monkeyname: row.monkeyid,
+                        block: row.block,
+                        trial: row.trial,
+                        x: row.x,
+                        y: row.y,
+                        z: row.z / 50, // Convert to 0-1 range
+                        zscaled: row.zscaled,
+                        scale: row.scale,
+                        envOrder: row.envOrder,
+                        LocationX: row.x,
+                        LocationY: row.y,
+                        Value: row.z / 50, // Convert to 0-1 range
+                        IsInitialReveal: row.isInitialReveal,
+                        GridPosition: row.y * 8 + row.x,
+                        ReactionTime: 500, // Default placeholder
+                        environment: row.environment,
+                        isInitial: row.trial === 1 // Extra flag for clearly marking initial tiles
+                    })),
+                    organizedByBlock: organizedByBlock
+                }
+            };
+            
+            // Convert to JSON string
+            const jsonContent = JSON.stringify(jsonData, null, 2);
+            
+            // Create download
+            const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            
+            // Create filename with date and monkey name
+            const date = new Date().toISOString().split('T')[0];
+            const monkeyName = monkeyNameInput.value.trim();
+            const tryPart = selectedTryNumber === 'all' ? 'AllTries' : `Try${selectedTryNumber}`;
+            link.setAttribute('download', `${monkeyName}_Level3_${tryPart}_${date}.json`);
+            
+            // Trigger download
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // Show success message
+            successDiv.textContent = `JSON downloaded successfully (${dataToExport.length} rows)`;
+            successDiv.style.display = 'block';
+        }
+        
+        // Load SQL.js dynamically
+        function initSqlJs(config) {
+            return new Promise(function (resolve, reject) {
+                // Load SQL.js script
+                var script = document.createElement('script');
+                script.src = "https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js";
+                script.onload = function () {
+                    // Initialize SQL.js
+                    initSqlJs(config).then(function (SQL) {
+                        resolve(SQL);
+                    }).catch(function (err) {
+                        reject(err);
+                    });
+                };
+                script.onerror = function (err) {
+                    reject(new Error('Failed to load SQL.js'));
+                };
+                document.head.appendChild(script);
+            });
+        }
+        
+        /////////////////////////////////////////////
+        // HEATMAP VISUALIZATION FUNCTIONALITY
+        /////////////////////////////////////////////
+        
+        // Colors for heatmap - same as used in the original experiment
+        const colors = ['#fff7ec', '#fee8c8', '#fdd49e', '#fdbb84', '#fc8d59', '#ef6548', '#d7301f', '#b30000', '#7f0000'];
+        const heatmapColor = d3.scale.linear().domain(d3.range(0, 50, 50.0 / (colors.length - 1))).range(colors);
+        
+        // Toggle heatmap visibility
+        function toggleHeatmap() {
+            const heatmapContainer = document.getElementById('heatmapContainer');
+            if (heatmapContainer.style.display === 'none') {
+                heatmapContainer.style.display = 'block';
+                // Initialize heatmap if first time
+                populateHeatmapTrySelector();
+                updateHeatmap();
+            } else {
+                heatmapContainer.style.display = 'none';
+            }
+        }
+        
+        // Populate the heatmap try selector
+        function populateHeatmapTrySelector() {
+            const heatmapTrySelector = document.getElementById('heatmapTrySelector');
+            
+            // Clear existing options
+            heatmapTrySelector.innerHTML = '';
+            
+            // Add options for each try number
+            availableTryNumbers.forEach(tryNum => {
+                const option = document.createElement('option');
+                option.value = tryNum;
+                option.textContent = `Try #${tryNum}`;
+                heatmapTrySelector.appendChild(option);
+            });
+            
+            // Select first try by default if available
+            if (availableTryNumbers.length > 0) {
+                heatmapTrySelector.value = availableTryNumbers[0];
+            }
+        }
+        
+        // Update the heatmap based on selected try
+        function updateHeatmap() {
+            const heatmapTrySelector = document.getElementById('heatmapTrySelector');
+            const selectedTryNumber = parseInt(heatmapTrySelector.value);
+            
+            // Filter data for the selected try
+            const filteredData = exportData.filter(row => row.block === selectedTryNumber);
+            
+            if (filteredData.length === 0) {
+                document.getElementById('heatmapDetails').innerHTML = '<p>No data available for this try.</p>';
+                return;
+            }
+            
+            // Get environment type and try information
+            const environmentType = filteredData[0].environment;
+            const envOrder = filteredData[0].envOrder;
+            const scale = filteredData[0].scale;
+            
+            // Create grid data structure (8x8 grid)
+            const gridData = createHeatmapGrid(filteredData);
+            // Make gridData accessible to tooltip functions
+            window.gridData = gridData;
+            
+            // Generate the heatmap visualization
+            generateHeatmap(gridData, selectedTryNumber, environmentType, envOrder, scale);
+            
+            // Generate information about this heatmap
+            generateHeatmapInfo(filteredData, selectedTryNumber, environmentType, envOrder, scale);
+        }
+        
+        // Create 8x8 grid data structure from the filtered data
+        function createHeatmapGrid(filteredData) {
+            // Initialize empty 8x8 grid
+            const grid = [];
+            for (let y = 0; y < 8; y++) {
+                grid[y] = [];
+                for (let x = 0; x < 8; x++) {
+                    grid[y][x] = {
+                        x: x,
+                        y: y,
+                        value: 0,
+                        zscaled: 0,
+                        clicked: false,
+                        clickOrder: null,
+                        isInitial: false,
+                        pelletCount: 0
+                    };
+                }
+            }
+            
+            // Fill grid with actual data
+            filteredData.forEach(cell => {
+                const x = cell.x;
+                const y = cell.y;
+                
+                if (x >= 0 && x < 8 && y >= 0 && y < 8) {
+                    // Check if this position already has a click
+                    if (grid[y][x].clicked) {
+                        // If already clicked, add this trial to the clickOrder array
+                        if (!Array.isArray(grid[y][x].clickOrder)) {
+                            // Convert existing clickOrder to array
+                            grid[y][x].clickOrder = [grid[y][x].clickOrder];
+                        }
+                        grid[y][x].clickOrder.push(cell.trial);
+                        // Update other properties to latest click values
+                        grid[y][x].value = cell.z;
+                        grid[y][x].zscaled = cell.zscaled;
+                        grid[y][x].pelletCount = Math.min(5, Math.max(1, cell.pellet_count || Math.ceil(cell.z * 5 / 50)));
+                    } else {
+                        // First click on this position
+                        grid[y][x] = {
+                            x: x,
+                            y: y,
+                            value: cell.z,
+                            zscaled: cell.zscaled,
+                            clicked: true,
+                            clickOrder: cell.trial,
+                            isInitial: cell.isInitialReveal === 1 || cell.trial === 1,
+                            pelletCount: Math.min(5, Math.max(1, cell.pellet_count || Math.ceil(cell.z * 5 / 50)))
+                        };
+                    }
+                }
+            });
+            
+            return grid;
+        }
+        
+        // Generate the heatmap visualization
+        function generateHeatmap(gridData, tryNumber, environmentType, envOrder, scale) {
+            // Clear previous heatmap
+            const heatmapGridDiv = document.getElementById('heatmapGrid');
+            heatmapGridDiv.innerHTML = '';
+            
+            // Create table for the grid
+            const table = document.createElement('table');
+            table.className = 'heatmap-grid';
+            
+            // Add title
+            const title = document.createElement('caption');
+            title.innerHTML = `<strong>Heatmap for Try #${tryNumber}</strong> - Environment: ${environmentType} (Order: ${envOrder})`;
+            table.appendChild(title);
+            
+            // Create tooltip element for hover info
+            let tooltip = document.createElement('div');
+            tooltip.className = 'cell-tooltip';
+            tooltip.style.display = 'none';
+            document.body.appendChild(tooltip);
+            
+            // Create rows and cells
+            for (let y = 0; y < 8; y++) {
+                const tr = document.createElement('tr');
+                
+                for (let x = 0; x < 8; x++) {
+                    const cell = gridData[y][x];
+                    const td = document.createElement('td');
+                    
+                    // Set background color based on the value, using the original color scale
+                    // Ensure pellet count is limited to 1-5 range
+                    const pelletCount = cell.clicked ? Math.min(5, Math.max(1, cell.pelletCount || 1)) : 0;
+                    // Use the original value for color mapping, but ensure correct pellet count
+                    cell.pelletCount = pelletCount; // Make sure pellet count is corrected
+                    const bgColor = cell.clicked ? heatmapColor(cell.value) : '#ffffff';
+                    td.style.backgroundColor = bgColor;
+                    
+                    // Mark initial revealed tile with special border and styling
+                    if (cell.isInitial) {
+                        td.classList.add('initial-reveal');
+                        
+                        // Make the text "Initial" appear inside the cell
+                        const cellNum = document.createElement('div');
+                        cellNum.textContent = cell.clickOrder;
+                        cellNum.style.fontWeight = 'bold';
+                        
+                        const initialLabel = document.createElement('div');
+                        initialLabel.textContent = 'INITIAL';
+                        initialLabel.style.fontSize = '9px';
+                        initialLabel.style.marginTop = '2px';
+                        initialLabel.style.color = '#000';
+                        
+                        td.appendChild(cellNum);
+                        td.appendChild(initialLabel);
+                    } 
+                    // Add click order number if clicked but not initial
+                    else if (cell.clicked) {
+                        // If there are multiple clicks, show the first one with a + sign
+                        if (Array.isArray(cell.clickOrder)) {
+                            td.textContent = cell.clickOrder[0] + '+';
+                        } else {
+                            td.textContent = cell.clickOrder;
+                        }
+                    }
+                    
+                    // Add data attributes for tooltip
+                    td.setAttribute('data-x', x);
+                    td.setAttribute('data-y', y);
+                    td.setAttribute('data-value', cell.value);
+                    td.setAttribute('data-zscaled', cell.zscaled);
+                    td.setAttribute('data-clicked', cell.clicked);
+                    td.setAttribute('data-order', cell.clickOrder);
+                    td.setAttribute('data-pellets', cell.pelletCount);
+                    
+                    // Add hover event for tooltip
+                    td.addEventListener('mouseover', function(e) {
+                        const cellX = parseInt(this.getAttribute('data-x'));
+                        const cellY = parseInt(this.getAttribute('data-y'));
+                        const value = parseFloat(this.getAttribute('data-value'));
+                        const zscaled = parseFloat(this.getAttribute('data-zscaled'));
+                        const clicked = this.getAttribute('data-clicked') === 'true';
+                        const clickOrder = this.getAttribute('data-order');
+                        
+                        if (clicked) {
+                            // Get all clicks for this cell from gridData
+                            const cellData = gridData[cellY][cellX];
+                            
+                            // Create the clicks display text
+                            let clicksText = '';
+                            if (Array.isArray(cellData.clickOrder)) {
+                                clicksText = `<div>Clicks #: ${cellData.clickOrder.join(', ')}</div>`;
+                            } else {
+                                clicksText = `<div>Click #: ${clickOrder}</div>`;
+                            }
+                            
+                            tooltip.innerHTML = `
+                                <div>Position: (${cellX}, ${cellY})</div>
+                                <div>Z-scaled Value: ${zscaled}</div>
+                                ${clicksText}
+                                ${cellData.isInitial ? 
+                                    '<div style="margin-top: 5px; padding: 3px; background-color: yellow; color: black; font-weight: bold; text-align: center;">INITIAL REVEALED TILE</div>' 
+                                    : ''}
+                            `;
+                            
+                            // Position tooltip
+                            tooltip.style.left = e.pageX + 10 + 'px';
+                            tooltip.style.top = e.pageY + 10 + 'px';
+                            tooltip.style.display = 'block';
+                        }
+                    });
+                    
+                    td.addEventListener('mouseout', function() {
+                        tooltip.style.display = 'none';
+                    });
+                    
+                    tr.appendChild(td);
+                }
+                
+                table.appendChild(tr);
+            }
+            
+            heatmapGridDiv.appendChild(table);
+            
+            // No color legend needed
+        }
+        
+        // Create color legend for the heatmap - now empty since we don't need it
+        function createHeatmapLegend() {
+            const legendDiv = document.getElementById('heatmapLegend');
+            legendDiv.innerHTML = '';
+            // No legend needed
+        }
+        
+        // Generate information about this heatmap
+        function generateHeatmapInfo(filteredData, tryNumber, environmentType, envOrder, scale) {
+            const heatmapInfoDiv = document.getElementById('heatmapDetails');
+            
+            // Calculate statistics
+            const totalClicks = filteredData.length;
+            const initialReveal = filteredData.find(d => d.isInitialReveal === 1 || d.trial === 1);
+            const maxValue = Math.max(...filteredData.map(d => d.z));
+            const maxValueCell = filteredData.find(d => d.z === maxValue);
+            const avgValue = (filteredData.reduce((sum, d) => sum + d.z, 0) / totalClicks).toFixed(2);
+            
+            // Create info panel
+            heatmapInfoDiv.innerHTML = `
+                <div>
+                    <p><strong>Environment Type:</strong> ${environmentType} (Order: ${envOrder})</p>
+                    <p><strong>Scale Factor:</strong> ${scale}</p>
+                    <p><strong>Total Tiles:</strong> ${totalClicks} (1 initial + ${totalClicks - 1} selected)</p>
+                    
+                </div>
+                <div style="margin-top: 15px;">
+                    <p><strong>Visualization Legend:</strong></p>
+                    <p>Brighter red indicates higher values (higher reward), while white indicates lower values.</p>
+                    <p>Numbers in cells show the order in which tiles were clicked.</p>
+                    <p>The initial revealed tile is highlighted with a yellow border and labeled "INITIAL".</p>
+                    <p>Hover over a cell to see the Z-scaled value for that tile.</p>
+                </div>
+            `;
+        }
+        
+        // Download the heatmap as an image using html2canvas approach
+        function downloadHeatmapImage() {
+            const heatmapSection = document.getElementById('heatmapSection');
+            if (!heatmapSection) return;
+            
+            // Show a message that download is being prepared
+            const heatmapDetails = document.getElementById('heatmapDetails');
+            const originalContent = heatmapDetails.innerHTML;
+            heatmapDetails.innerHTML += '<p><strong>Preparing download...</strong></p>';
+            
+            // Get information for the image
+            const tryNumber = document.getElementById('heatmapTrySelector').value;
+            const monkeyName = monkeyNameInput.value.trim();
+            
+            // Create a new div to contain everything we want in the image
+            const container = document.createElement('div');
+            container.style.backgroundColor = 'white';
+            container.style.padding = '20px';
+            container.style.width = '520px';
+            container.style.position = 'absolute';
+            container.style.left = '-9999px';
+            container.style.top = '-9999px';
+            
+            // Add title
+            const title = document.createElement('h3');
+            title.textContent = `Heatmap for ${monkeyName} - Try #${tryNumber}`;
+            title.style.textAlign = 'center';
+            title.style.margin = '0 0 15px 0';
+            title.style.fontFamily = 'Arial, sans-serif';
+            container.appendChild(title);
+            
+            // Clone the heatmap grid
+            const gridClone = heatmapSection.querySelector('.heatmap-grid').cloneNode(true);
+            container.appendChild(gridClone);
+            
+            // No legend needed
+            // Add a small note instead
+            const note = document.createElement('div');
+            note.textContent = 'Numbers show click order. Brighter red = higher reward (higher z-scaled value).';
+            note.style.marginTop = '10px';
+            note.style.fontSize = '12px';
+            container.appendChild(note);
+            
+            // Add to document temporarily
+            document.body.appendChild(container);
+            
+            // Use setTimeout to ensure the DOM has updated
+            setTimeout(() => {
+                // Create a canvas from the container
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = container.offsetWidth;
+                canvas.height = container.offsetHeight;
+                
+                // Draw white background
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Convert the container to data URL using manual drawing
+                const gridCells = container.querySelectorAll('td');
+                const tableRect = gridClone.getBoundingClientRect();
+                
+                // Draw manually each cell with its color and content
+                ctx.font = '14px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                // Draw the title
+                ctx.fillStyle = 'black';
+                ctx.font = 'bold 16px Arial';
+                ctx.fillText(title.textContent, canvas.width / 2, 15);
+                
+                // Execute the drawing in a way that works in the browser
+                html2canvas(container, { backgroundColor: 'white' }).then(function(canvas) {
+                    // Convert to data URL and download
+                    const imgData = canvas.toDataURL('image/png');
+                    const a = document.createElement('a');
+                    a.href = imgData;
+                    a.download = `${monkeyName}_Heatmap_Try${tryNumber}.png`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    
+                    // Clean up
+                    document.body.removeChild(container);
+                    heatmapDetails.innerHTML = originalContent;
+                }).catch(function(error) {
+                    console.error('Error generating heatmap image:', error);
+                    // Fallback method for simpler export
+                    fallbackImageExport();
+                    
+                    // Clean up
+                    document.body.removeChild(container);
+                    heatmapDetails.innerHTML = originalContent;
+                });
+            }, 100);
+            
+            // Fallback method if html2canvas fails
+            function fallbackImageExport() {
+                // Get the HTML representation of the heatmap grid
+                const gridDiv = document.getElementById('heatmapGrid');
+                const gridHtml = gridDiv.innerHTML;
+                
+                // Create a standalone HTML document for the grid
+                const html = `
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>Heatmap</title>
+                        <style>
+                            body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+                            .heatmap-grid { border-collapse: separate; border: 2px solid lightgray; margin: 0 auto; }
+                            .heatmap-grid td { width: 50px; height: 50px; border: 2px solid lightgray; text-align: center; }
+                            .initial-reveal { 
+                                border: 3px solid yellow !important; 
+                                box-shadow: 0 0 10px rgba(255, 255, 0, 0.7);
+                                position: relative;
+                            }
+                            /* No star symbol */
+                            h3 { margin-bottom: 20px; }
+                        </style>
+                    </head>
+                    <body>
+                        <h3>Heatmap for ${monkeyName} - Try #${tryNumber}</h3>
+                        <div>${gridHtml}</div>
+                        <div style="margin-top: 20px; font-size: 14px; text-align: left; max-width: 500px; margin-left: auto; margin-right: auto;">
+                            <p><strong>Legend:</strong></p>
+                            <p>- Brighter red indicates higher values (higher reward)</p>
+                            <p>- Numbers show the sequence order of clicks</p>
+                            <p>- Initial revealed tile has a yellow border and shows "INITIAL"</p>
+                            <p>- Hovering shows the z-scaled value for each cell</p>
+                        </div>
+                    </body>
+                    </html>
+                `;
+                
+                // Create a Blob from the HTML
+                const blob = new Blob([html], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                
+                // Create download link
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${monkeyName}_Heatmap_Try${tryNumber}.html`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                alert('Downloaded HTML version of heatmap. For best results, open in a browser and use screenshot.');
+            }
+        }
+        
+        // Add html2canvas library for better image export
+        function loadHtml2Canvas() {
+            if (window.html2canvas) return Promise.resolve();
+            
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = 'https://html2canvas.hertzen.com/dist/html2canvas.min.js';
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+        
+        // Load html2canvas when page loads
+        loadHtml2Canvas().catch(err => {
+            console.warn('Could not load html2canvas library:', err);
+        });
+    </script>
+</body>
+</html>

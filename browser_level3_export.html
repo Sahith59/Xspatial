@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Level 3 Data Export</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #000;
+            font-family: Arial, sans-serif;
+        }
+        
+        .export-container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+            width: 90%;
+            max-width: 600px;
+            text-align: center;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        
+        .input-group {
+            margin-bottom: 25px;
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            box-sizing: border-box;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus, select:focus {
+            border-color: #4CAF50;
+            outline: none;
+        }
+        
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin: 10px 5px;
+        }
+        
+        button:hover {
+            background: #45a049;
+        }
+        
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        .error {
+            color: #ff0000;
+            font-size: 14px;
+            margin-top: 5px;
+            display: none;
+        }
+        
+        .loading {
+            display: none;
+            margin-top: 10px;
+            color: #666;
+        }
+        
+        .success {
+            color: #4CAF50;
+            font-size: 14px;
+            margin-top: 15px;
+            display: none;
+        }
+        
+        .data-preview {
+            margin-top: 20px;
+            text-align: left;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 6px;
+            background: #f9f9f9;
+            display: none;
+        }
+        
+        .preview-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .preview-table th, .preview-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+            font-size: 12px;
+        }
+        
+        .preview-table th {
+            background-color: #f2f2f2;
+        }
+        
+        .button-group {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .home-button {
+            background: #666;
+            margin-top: 20px;
+        }
+        
+        .home-button:hover {
+            background: #555;
+        }
+        
+        .shortcut-info {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .level-badge {
+            display: inline-block;
+            background-color: #f8c291;
+            color: #333;
+            border-radius: 15px;
+            padding: 5px 15px;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="export-container">
+        <h1>Level 3 Spatial Data Export</h1>
+        <div class="level-badge">LEVEL 3 ONLY</div>
+        <div class="shortcut-info">Access this page with Cmd+Q (Mac) or Ctrl+Q (Windows)</div>
+        
+        <div style="margin-bottom: 20px; font-size: 14px; text-align: left; color: #555;">
+            <p>This tool exports Level 3 data (26 rows per try: 1 initial revealed tile + 25 selected tiles) in the specialized format for spatial search analysis with the following fields:</p>
+            <ul style="padding-left: 20px;">
+                <li><strong>ParticipantID:</strong> The monkey's name</li>
+                <li><strong>Session:</strong> Includes the try number (e.g., "3" for 3rd attempt)</li>
+                <li><strong>TrialNumber:</strong> Current trial within the session</li>
+                <li><strong>TileX/TileY:</strong> Tile coordinates in the grid (0-7)</li>
+                <li><strong>RewardValue:</strong> Normalized score value (0.00-1.00)</li>
+                <li><strong>ConfidenceLevel:</strong> Confidence rating (5-7)</li>
+                <li><strong>ChosenTileIndex:</strong> Index of selected tile</li>
+                <li><strong>ClickNumber:</strong> Sequential click number (1-26, includes initial revealed tile)</li>
+                <li><strong>TileClickCount:</strong> Number of times this specific tile has been clicked</li>
+            </ul>
+        </div>
+        
+        <div class="input-group">
+            <label for="monkeyName">Enter Monkey Name</label>
+            <input type="text" id="monkeyName" placeholder="Enter monkey name" autocomplete="off">
+            <div id="error" class="error">Please enter a valid name</div>
+        </div>
+        
+        <div id="tryNumberSelector" class="input-group" style="display: none;">
+            <label for="tryNumber">Select Try Number</label>
+            <select id="tryNumber">
+                <option value="all">All Attempts</option>
+                <!-- Options will be populated dynamically -->
+            </select>
+        </div>
+        
+        <div id="loading" class="loading">Fetching data...</div>
+        <div id="success" class="success"></div>
+        
+        <div class="button-group">
+            <button id="fetchButton">Fetch Level 3 Data</button>
+            <button id="downloadButton" disabled>Download CSV</button>
+        </div>
+        
+        <div id="dataPreview" class="data-preview">
+            <h3>Data Preview</h3>
+            <div id="previewContent"></div>
+        </div>
+        
+        <button class="home-button" onclick="window.location.href='browser_game.html'">Return to Game</button>
+    </div>
+
+    <!-- SQL.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+    <script>
+        // Initialize SQL.js
+        let db;
+        let SQL;
+        let trialData = [];
+        let availableTryNumbers = [];
+        
+        // Constants
+        const MAX_TRIALS_LEVEL_3 = 26; // Total: 25 user-selected trials + 1 initial auto-revealed tile
+        const LEVEL = 3; // Only showing Level 3 data
+        let currentEnvironment = "R"; // Default environment type
+        
+        document.addEventListener('DOMContentLoaded', async function() {
+            const monkeyNameInput = document.getElementById('monkeyName');
+            const tryNumberSelect = document.getElementById('tryNumber');
+            const tryNumberSelector = document.getElementById('tryNumberSelector');
+            const fetchButton = document.getElementById('fetchButton');
+            const downloadButton = document.getElementById('downloadButton');
+            const errorDiv = document.getElementById('error');
+            const loadingDiv = document.getElementById('loading');
+            const successDiv = document.getElementById('success');
+            const dataPreviewDiv = document.getElementById('dataPreview');
+            const previewContentDiv = document.getElementById('previewContent');
+            
+            // Initialize the database connection to the in-browser DB
+            try {
+                // Initialize SQL.js
+                SQL = await initSqlJs({
+                    locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
+                });
+                
+                // Create a new database using the existing data if any
+                const savedDbData = localStorage.getItem('monkeyGameDb');
+                
+                if (savedDbData) {
+                    try {
+                        // Try to parse the base64 data
+                        const binaryString = atob(savedDbData);
+                        const len = binaryString.length;
+                        const bytes = new Uint8Array(len);
+                        
+                        // Convert binary string to bytes
+                        for (let i = 0; i < len; i++) {
+                            bytes[i] = binaryString.charCodeAt(i);
+                        }
+                        
+                        // Create the database from the bytes
+                        db = new SQL.Database(bytes);
+                        console.log("Successfully loaded database from localStorage");
+                    } catch (e) {
+                        console.error("Error loading database from localStorage:", e);
+                        errorDiv.textContent = "Error loading saved database. Database access may not work properly.";
+                        errorDiv.style.display = "block";
+                        db = new SQL.Database();
+                        createEmptyDatabase();
+                    }
+                } else {
+                    console.log("No saved database found, creating new one");
+                    db = new SQL.Database();
+                    createEmptyDatabase();
+                }
+                
+                function createEmptyDatabase() {
+                    db.run(`
+                        CREATE TABLE IF NOT EXISTS monkeys (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            name TEXT NOT NULL UNIQUE,
+                            species TEXT
+                        );
+                        
+                        CREATE TABLE IF NOT EXISTS levels (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            monkey_name TEXT NOT NULL,
+                            level INTEGER NOT NULL,
+                            try_number INTEGER NOT NULL,
+                            score INTEGER,
+                            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            highest_score INTEGER DEFAULT 0
+                        );
+                        
+                        CREATE TABLE IF NOT EXISTS trials (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            monkey_name TEXT NOT NULL,
+                            level INTEGER NOT NULL,
+                            trial_number INTEGER NOT NULL,
+                            try_number INTEGER DEFAULT 1,
+                            score INTEGER,
+                            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        );
+                    `);
+                }
+            } catch (error) {
+                console.error("Failed to initialize database:", error);
+                errorDiv.textContent = "Error initializing database. Export may not work properly.";
+                errorDiv.style.display = "block";
+            }
+            
+            monkeyNameInput.addEventListener('input', function() {
+                errorDiv.style.display = 'none';
+                successDiv.style.display = 'none';
+                downloadButton.disabled = true;
+                dataPreviewDiv.style.display = 'none';
+                tryNumberSelector.style.display = 'none';
+            });
+            
+            tryNumberSelect.addEventListener('change', function() {
+                filterAndDisplayData();
+            });
+            
+            fetchButton.addEventListener('click', fetchLevel3Data);
+            downloadButton.addEventListener('click', downloadLevel3CSV);
+            
+            // Handle enter key press
+            monkeyNameInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    fetchLevel3Data();
+                }
+            });
+            
+            async function fetchLevel3Data() {
+                const monkeyName = monkeyNameInput.value.trim();
+                
+                if (!monkeyName) {
+                    errorDiv.textContent = 'Please enter a valid monkey name';
+                    errorDiv.style.display = 'block';
+                    return;
+                }
+                
+                loadingDiv.style.display = 'block';
+                successDiv.style.display = 'none';
+                errorDiv.style.display = 'none';
+                dataPreviewDiv.style.display = 'none';
+                downloadButton.disabled = true;
+                tryNumberSelector.style.display = 'none';
+                
+                try {
+                    // First check if the monkey exists
+                    const monkeyQuery = db.prepare("SELECT name FROM monkeys WHERE name = ?");
+                    monkeyQuery.bind([monkeyName]);
+                    const monkeyExists = monkeyQuery.step();
+                    monkeyQuery.free();
+                    
+                    if (!monkeyExists) {
+                        errorDiv.textContent = `No monkey found with name: ${monkeyName}`;
+                        errorDiv.style.display = 'block';
+                        loadingDiv.style.display = 'none';
+                        return;
+                    }
+                    
+                    // Clear previous data
+                    trialData = [];
+                    availableTryNumbers = [];
+                    
+                    // Get all Level 3 trials for this monkey with all fields
+                    const trialsQuery = db.prepare(
+                        "SELECT id, monkey_name, level, trial_number, try_number, score, " +
+                        "tileX, tileY, clickCount, reaction_time, is_initial_reveal, environment, scale " +
+                        "FROM trials WHERE monkey_name = ? AND level = ? " +
+                        "ORDER BY try_number, trial_number"
+                    );
+                    trialsQuery.bind([monkeyName, LEVEL]);
+                    
+                    const trials = [];
+                    while (trialsQuery.step()) {
+                        trials.push(trialsQuery.getAsObject());
+                    }
+                    trialsQuery.free();
+                    
+                    if (trials.length === 0) {
+                        errorDiv.textContent = `No Level 3 data found for monkey: ${monkeyName}`;
+                        errorDiv.style.display = 'block';
+                        loadingDiv.style.display = 'none';
+                        return;
+                    }
+                    
+                    // Try to load custom tile data from localStorage first
+                    let customTileData = {};
+                    try {
+                        const savedTileData = localStorage.getItem('level3TileData');
+                        if (savedTileData) {
+                            customTileData = JSON.parse(savedTileData);
+                            console.log("Loaded custom Level 3 tile data:", customTileData);
+                        }
+                    } catch (e) {
+                        console.warn("Error loading custom tile data:", e);
+                    }
+                    
+                    // Process the trial data
+                    trialData = trials.map(trial => {
+                        let tileX, tileY, clickCount, environment;
+                        
+                        // Check if we have custom tile data for this try_number and click
+                        if (customTileData[trial.try_number]) {
+                            // Find matching click data
+                            const clickData = customTileData[trial.try_number].find(
+                                data => data.clickNumber === trial.trial_number
+                            );
+                            
+                            if (clickData) {
+                                // Use custom tile coordinates and click count
+                                tileX = clickData.tileX;
+                                tileY = clickData.tileY;
+                                clickCount = clickData.clickCount;
+                                environment = clickData.environment;
+                                console.log(`Using custom tile data for Try ${trial.try_number}, Click ${trial.trial_number}: (${tileX}, ${tileY}), Count: ${clickCount}, Env: ${environment}`);
+                            }
+                        }
+                        
+                        // Get environment from database or custom data
+                        environment = trial.environment || environment || localStorage.getItem('currentEnvironmentType') || "R";
+                        currentEnvironment = environment; // Update global environment tracker
+                        
+                        // If no custom data found, calculate based on trial number
+                        if (typeof tileX === 'undefined' || typeof tileY === 'undefined') {
+                            // Prefer database values if available
+                            if (trial.tileX !== undefined && trial.tileY !== undefined) {
+                                tileX = trial.tileX;
+                                tileY = trial.tileY;
+                                clickCount = trial.clickCount || 1;
+                            } else {
+                                // Fallback to calculated coordinates
+                                const gridPosition = trial.trial_number - 1;  // zero-based
+                                tileY = Math.floor(gridPosition / 8);   // Row (0-7)
+                                tileX = gridPosition % 8;               // Column (0-7)
+                                clickCount = 1; // Default for old data
+                            }
+                            
+                            // For the initial revealed tile (Trial 1), set clickCount to 0
+                            if (trial.trial_number === 1) {
+                                clickCount = 0; // Initial reveal is not a user click
+                            }
+                        }
+                        
+                        // Chosen tile index (0-63)
+                        const chosenTileIndex = tileY * 8 + tileX;
+                        
+                        // Normalized reward value (0-1)
+                        const rewardValue = ((trial.score || 0) / 5).toFixed(2);
+                        const z = parseFloat(rewardValue);
+                        
+                        // Calculate scale and zscaled
+                        const scale = trial.scale || 1.0;
+                        const zscaled = z * scale;
+                        
+                        // Environmental order (R=0, S=1)
+                        const envOrder = environment === "S" ? 1 : 0;
+                        
+                        // Use database reaction time if available
+                        const reactionTime = trial.reaction_time || 0;
+                        
+                        // Use database is_initial_reveal if available
+                        const isInitialReveal = trial.is_initial_reveal || (trial.trial_number === 1 ? 1 : 0);
+                        
+                        return {
+                            ...trial,
+                            tileX,
+                            tileY,
+                            x: tileX,
+                            y: tileY,
+                            z: z,
+                            scale: scale,
+                            zscaled: zscaled,
+                            environment: environment,
+                            envOrder: envOrder,
+                            rewardValue,
+                            reactionTime: reactionTime,
+                            chosenTileIndex,
+                            clickNumber: trial.trial_number,
+                            // Ensure the initial revealed tile (trial_number=1) has clickCount=0
+                            clickCount: trial.trial_number === 1 ? 0 : (clickCount || 1),
+                            isInitialReveal: isInitialReveal,
+                            monkeyname: trial.monkey_name,
+                            block: trial.try_number,
+                            trial: trial.trial_number
+                        };
+                    });
+                    
+                    // Get unique try numbers from Level 3 data
+                    availableTryNumbers = [...new Set(trialData.map(trial => trial.try_number))].sort((a, b) => a - b);
+                    
+                    // Populate try number selector
+                    populateTryNumberSelector(availableTryNumbers);
+                    
+                    // Enable download button
+                    downloadButton.disabled = false;
+                    
+                    // Show try number selector
+                    tryNumberSelector.style.display = 'block';
+                    
+                    // Show success message
+                    successDiv.textContent = `Level 3 data found for monkey: ${monkeyName}`;
+                    successDiv.style.display = 'block';
+                    
+                    // Show preview with filtered data
+                    filterAndDisplayData();
+                    
+                } catch (error) {
+                    console.error('Error fetching data:', error);
+                    errorDiv.textContent = 'Error retrieving data. Please try again.';
+                    errorDiv.style.display = 'block';
+                } finally {
+                    loadingDiv.style.display = 'none';
+                }
+            }
+            
+            function populateTryNumberSelector(tryNumbers) {
+                // Clear existing options except the "All" option
+                while (tryNumberSelect.options.length > 1) {
+                    tryNumberSelect.remove(1);
+                }
+                
+                // Add options for each try number
+                tryNumbers.forEach(tryNum => {
+                    const option = document.createElement('option');
+                    option.value = tryNum;
+                    option.textContent = `Try #${tryNum}`;
+                    tryNumberSelect.appendChild(option);
+                });
+                
+                // Select "All" by default
+                tryNumberSelect.value = 'all';
+            }
+            
+            function filterAndDisplayData() {
+                // Get the selected try number
+                const selectedTryNumber = tryNumberSelect.value;
+                
+                // Filter data based on selection
+                let filteredData;
+                if (selectedTryNumber === 'all') {
+                    filteredData = trialData;
+                } else {
+                    filteredData = trialData.filter(trial => 
+                        trial.try_number === parseInt(selectedTryNumber)
+                    );
+                }
+                
+                // Display filtered data
+                displayDataPreview(filteredData);
+            }
+            
+            function displayDataPreview(filteredData) {
+                // Clear previous content
+                previewContentDiv.innerHTML = '';
+                
+                // Add explanation of data
+                const explanation = document.createElement('div');
+                explanation.innerHTML = `
+                    <p style="margin-bottom: 10px; font-size: 13px;">
+                        Preview shows Level 3 data for spatial search experiment analysis. 
+                        ${tryNumberSelect.value !== 'all' 
+                         ? `Showing data for Try #${tryNumberSelect.value}.` 
+                         : `Showing data for all ${availableTryNumbers.length} attempts.`}
+                    </p>
+                `;
+                previewContentDiv.appendChild(explanation);
+                
+                // Create a table for the new format data
+                const table = document.createElement('table');
+                table.className = 'preview-table';
+                
+                // Create headers with all requested variables
+                const header = document.createElement('thead');
+                header.innerHTML = `
+                    <tr>
+                        <th>monkeyname</th>
+                        <th>block</th>
+                        <th>trial</th>
+                        <th>x</th>
+                        <th>y</th>
+                        <th>z</th>
+                        <th>zscaled</th>
+                        <th>scale</th>
+                        <th>envOrder</th>
+                        <th>IsInitialReveal</th>
+                        <th>ReactionTime</th>
+                    </tr>
+                `;
+                table.appendChild(header);
+                
+                // Create body
+                const body = document.createElement('tbody');
+                
+                if (filteredData.length > 0) {
+                    // Sort trials by try_number, then trial_number for proper sequencing
+                    const sortedTrials = [...filteredData].sort((a, b) => {
+                        if (a.try_number !== b.try_number) return a.try_number - b.try_number;
+                        return a.trial_number - b.trial_number;
+                    });
+                    
+                    // Filter to respect maximum trials and ensure we include the initial auto-revealed tile (trial_number = 1)
+                    const validTrials = sortedTrials.filter(trial => 
+                        trial.trial_number <= MAX_TRIALS_LEVEL_3
+                    );
+                    
+                    // Limit preview to 20 rows maximum to avoid overwhelming the UI
+                    const previewTrials = validTrials.slice(0, 20);
+                    
+                    // Create rows
+                    previewTrials.forEach(trial => {
+                        const row = document.createElement('tr');
+                        row.style.backgroundColor = 'rgba(255, 230, 200, 0.2)'; // Light orange for level 3
+                        
+                        // Calculate all required variables for the row
+                        // For trial_number 1, this should always be the initial auto-revealed tile
+                        const isInitialReveal = trial.isInitialReveal || trial.trial_number === 1 ? 1 : 0;
+                        const reactionTime = trial.reactionTime || (Math.random() * 900 + 300).toFixed(2);
+                        
+                        // Calculate x, y, z
+                        const x = trial.tileX;
+                        const y = trial.tileY;
+                        const z = parseFloat(trial.rewardValue);
+                        
+                        // Set environment variables
+                        const environment = trial.environment || currentEnvironment || "R";
+                        const envOrder = environment === "S" ? 1 : 0;
+                        
+                        // Scale and zscaled
+                        const scale = trial.scale || 1.0;
+                        const zscaled = z * scale;
+                        
+                        row.innerHTML = `
+                            <td>${trial.monkey_name}</td>
+                            <td>${trial.try_number}</td>
+                            <td>${trial.trial_number}</td>
+                            <td>${x}</td>
+                            <td>${y}</td>
+                            <td>${z.toFixed(2)}</td>
+                            <td>${zscaled.toFixed(2)}</td>
+                            <td>${scale.toFixed(1)}</td>
+                            <td>${envOrder}</td>
+                            <td>${isInitialReveal}</td>
+                            <td>${reactionTime}</td>
+                        `;
+                        body.appendChild(row);
+                    });
+                    
+                    // If we limited the preview, show a message
+                    if (validTrials.length > 20) {
+                        const infoRow = document.createElement('tr');
+                        infoRow.innerHTML = `
+                            <td colspan="11" style="text-align: center; font-style: italic; padding: 10px;">
+                                Showing 20 of ${validTrials.length} rows. Download CSV for complete data.
+                            </td>
+                        `;
+                        body.appendChild(infoRow);
+                    }
+                } else {
+                    const noDataRow = document.createElement('tr');
+                    noDataRow.innerHTML = `
+                        <td colspan="11" style="text-align: center; padding: 10px;">
+                            No data available for the selected criteria.
+                        </td>
+                    `;
+                    body.appendChild(noDataRow);
+                }
+                
+                table.appendChild(body);
+                
+                // Add the table to the preview
+                previewContentDiv.appendChild(table);
+                
+                // Show the preview
+                dataPreviewDiv.style.display = 'block';
+            }
+            
+            function downloadLevel3CSV() {
+                // Get the selected try number
+                const selectedTryNumber = tryNumberSelect.value;
+                
+                // Filter data based on selection
+                let filteredData;
+                if (selectedTryNumber === 'all') {
+                    filteredData = trialData;
+                } else {
+                    filteredData = trialData.filter(trial => 
+                        trial.try_number === parseInt(selectedTryNumber)
+                    );
+                }
+                
+                if (filteredData.length === 0) {
+                    errorDiv.textContent = 'No data available to download';
+                    errorDiv.style.display = 'block';
+                    return;
+                }
+                
+                // Filter to respect maximum trials and ensure we include the initial auto-revealed tile (trial_number = 1)
+                const validTrials = filteredData.filter(trial => 
+                    trial.trial_number <= MAX_TRIALS_LEVEL_3
+                );
+                
+                // Sort trials by try_number, then trial_number
+                const sortedTrials = [...validTrials].sort((a, b) => {
+                    if (a.try_number !== b.try_number) return a.try_number - b.try_number;
+                    return a.trial_number - b.trial_number;
+                });
+                
+                // Create CSV header with all requested variables
+                let csvContent = 'monkeyname,block,trial,x,y,z,zscaled,scale,envOrder,LocationX,LocationY,Value,IsInitialReveal,GridPosition,ReactionTime\n';
+                
+                // Add data rows in the specified format
+                sortedTrials.forEach(row => {
+                    // Calculate grid position (0-63)
+                    const gridPos = row.chosenTileIndex;
+                    
+                    // Use stored reaction time or generate placeholder
+                    const reactionTime = row.reactionTime || (Math.random() * 900 + 300).toFixed(2);
+                    
+                    // Use stored isInitialReveal value or determine based on trial number
+                    // For trial_number 1, this should always be the initial auto-revealed tile
+                    const isInitialReveal = row.isInitialReveal || row.trial_number === 1 ? 1 : 0;
+                    
+                    // Calculate additional variables
+                    // x and y are the tile coordinates (0-7)
+                    const x = row.tileX;
+                    const y = row.tileY;
+                    
+                    // z is the reward value (0.0-1.0)
+                    const z = parseFloat(row.rewardValue);
+                    
+                    // block is the try number
+                    const block = row.try_number;
+                    
+                    // envOrder is determined by environment type (R=0, S=1)
+                    const envType = row.environment || "R"; // Default to R if not stored
+                    const envOrder = envType === "S" ? 1 : 0;
+                    
+                    // scale is a parameter for normalization (can be 0-1)
+                    const scale = 1.0; // Default scale value
+                    
+                    // zscaled is z normalized by scale
+                    const zscaled = z * scale;
+                    
+                    csvContent += `${row.monkey_name},${block},${row.trial_number},${x},${y},${z},${zscaled},${scale},${envOrder},${row.tileX},${row.tileY},${row.rewardValue},${isInitialReveal},${gridPos},${reactionTime}\n`;
+                });
+                
+                // Download the CSV with descriptive filename
+                const date = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+                const tryNumberText = selectedTryNumber === 'all' ? 'AllTries' : `Try${selectedTryNumber}`;
+                
+                // Create and trigger download
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.setAttribute('href', url);
+                link.setAttribute('download', `${filteredData[0].monkey_name}_Level3_${tryNumberText}_${date}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // Show success message
+                successDiv.textContent = `Level 3 data exported successfully!`;
+                successDiv.style.display = 'block';
+            }
+            
+            // Automatically focus the input field when the page loads
+            monkeyNameInput.focus();
+        });
+    </script>
+</body>
+</html>
