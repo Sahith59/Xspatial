@@ -450,53 +450,48 @@
             tryNumberSelector.style.display = 'none';
             
             try {
-                // Check if the database is available
-                if (!db) {
-                    throw new Error("Database not initialized properly. Cannot retrieve actual game data.");
-                }
+                // Check for Level 3 data in user-specific localStorage first
+                const level3Data = getLevel3DataFromLocalStorage(monkeyName);
                 
-                // Check if the monkey exists in the database
-                const monkeyQuery = db.prepare("SELECT name FROM monkeys WHERE name = ?");
-                monkeyQuery.bind([monkeyName]);
-                const monkeyExists = monkeyQuery.step();
-                monkeyQuery.free();
-                
-                if (!monkeyExists) {
-                    throw new Error(`No monkey named ${monkeyName} found in the database. The monkey needs to have played Level 3 first.`);
-                }
-                
-                // Get Level 3 data for this monkey
-                const trialsQuery = db.prepare(
-                    "SELECT * FROM trials WHERE monkey_name = ? AND level = ? ORDER BY try_number, trial_number"
-                );
-                trialsQuery.bind([monkeyName, LEVEL]);
-                
-                // Process trial data
-                const trialsData = [];
-                while (trialsQuery.step()) {
-                    trialsData.push(trialsQuery.getAsObject());
-                }
-                trialsQuery.free();
-                
-                console.log(`Retrieved ${trialsData.length} Level 3 trials for ${monkeyName}`);
-                
-                if (trialsData.length === 0) {
-                    throw new Error(`No Level 3 data found for ${monkeyName}. The monkey needs to have played Level 3 first.`);
-                }
-                
-                // Check for level3TileData in localStorage
-                let tileData = null;
-                try {
-                    const tileDataJson = localStorage.getItem('level3TileData');
-                    if (tileDataJson) {
-                        tileData = JSON.parse(tileDataJson);
+                if (level3Data && level3Data.length > 0) {
+                    console.log(`Retrieved ${level3Data.length} Level 3 trials from localStorage for ${monkeyName}`);
+                    exportData = level3Data;
+                } else {
+                    // Fallback to database if no localStorage data
+                    if (!db) {
+                        throw new Error(`No Level 3 data found for ${monkeyName}. The player needs to play Level 3 first.`);
                     }
-                } catch (e) {
-                    console.error("Error parsing level3TileData:", e);
+                    
+                    // Check if the monkey exists in the database
+                    const monkeyQuery = db.prepare("SELECT name FROM monkeys WHERE name = ?");
+                    monkeyQuery.bind([monkeyName]);
+                    const monkeyExists = monkeyQuery.step();
+                    monkeyQuery.free();
+                    
+                    if (!monkeyExists) {
+                        throw new Error(`No monkey named ${monkeyName} found. The player needs to play Level 3 first.`);
+                    }
+                    
+                    // Get Level 3 data for this monkey from database
+                    const trialsQuery = db.prepare(
+                        "SELECT * FROM trials WHERE monkey_name = ? AND level = ? ORDER BY try_number, trial_number"
+                    );
+                    trialsQuery.bind([monkeyName, LEVEL]);
+                    
+                    // Process trial data
+                    const trialsData = [];
+                    while (trialsQuery.step()) {
+                        trialsData.push(trialsQuery.getAsObject());
+                    }
+                    trialsQuery.free();
+                    
+                    if (trialsData.length === 0) {
+                        throw new Error(`No Level 3 data found for ${monkeyName}. The player needs to play Level 3 first.`);
+                    }
+                    
+                    // Process trial data into export format
+                    exportData = processTrialData(trialsData, null, monkeyName);
                 }
-                
-                // Process trial data into export format
-                exportData = processTrialData(trialsData, tileData, monkeyName);
                 
                 // Get available try numbers
                 availableTryNumbers = [...new Set(exportData.map(row => row.block))].sort((a, b) => a - b);
@@ -521,109 +516,191 @@
                 console.error("Error fetching data:", error);
                 errorDiv.textContent = error.message || "Error retrieving data";
                 errorDiv.style.display = 'block';
-                
-                // Check if we can use level3TileData directly
-                if (error.message && error.message.includes("Database not initialized")) {
-                    tryGetDataFromLocalStorage(monkeyName);
-                }
             } finally {
                 loadingDiv.style.display = 'none';
             }
         }
         
-        // Try to get data directly from localStorage if database fails
-        function tryGetDataFromLocalStorage(monkeyName) {
+        // Get Level 3 data from user-specific localStorage keys
+        function getLevel3DataFromLocalStorage(playerId) {
             try {
-                const tileDataJson = localStorage.getItem('level3TileData');
-                if (!tileDataJson) {
-                    throw new Error(`No Level 3 data found for ${monkeyName} in localStorage.`);
+                // Check if player has Level 3 data using user-specific keys
+                const level3GameDataKey = `level3GameData_${playerId}`;
+                const level3TrialResultsKey = `level3TrialResults_${playerId}`;
+                
+                // Try to get trial results first (most comprehensive data)
+                const trialResultsJson = localStorage.getItem(level3TrialResultsKey);
+                if (trialResultsJson) {
+                    const trialResults = JSON.parse(trialResultsJson);
+                    console.log(`Found Level 3 trial results for ${playerId}:`, trialResults.length, 'trials');
+                    return processLevel3TrialResults(trialResults, playerId);
                 }
                 
-                // Parse the data
-                const tileData = JSON.parse(tileDataJson);
-                console.log("Found level3TileData in localStorage");
+                // Fallback to game data if no trial results
+                const gameDataJson = localStorage.getItem(level3GameDataKey);
+                if (gameDataJson) {
+                    const gameData = JSON.parse(gameDataJson);
+                    console.log(`Found Level 3 game data for ${playerId}:`, gameData);
+                    return processLevel3GameData(gameData, playerId);
+                }
                 
-                // Process the tile data into our format
-                exportData = [];
-                let rowIndex = 1;
+                // Check legacy keys for backward compatibility
+                const legacyTileData = localStorage.getItem('level3TileData');
+                if (legacyTileData) {
+                    const tileData = JSON.parse(legacyTileData);
+                    console.log(`Found legacy Level 3 tile data for ${playerId}`);
+                    return processLegacyTileData(tileData, playerId);
+                }
                 
-                for (const block in tileData) {
-                    const tryNum = parseInt(block);
-                    const trialData = tileData[block];
+                console.log(`No Level 3 data found for ${playerId}`);
+                return [];
+                
+            } catch (error) {
+                console.error(`Error retrieving Level 3 data for ${playerId}:`, error);
+                return [];
+            }
+        }
+        
+        // Process Level 3 trial results data
+        function processLevel3TrialResults(trialResults, playerId) {
+            const processedData = [];
+            let rowIndex = 1;
+            
+            // Group by try number
+            const trialsByTry = {};
+            trialResults.forEach(trial => {
+                const tryNum = trial.tryNumber || 1;
+                if (!trialsByTry[tryNum]) {
+                    trialsByTry[tryNum] = [];
+                }
+                trialsByTry[tryNum].push(trial);
+            });
+            
+            // Process each try
+            Object.keys(trialsByTry).forEach(tryNum => {
+                const tryNumber = parseInt(tryNum);
+                const trials = trialsByTry[tryNum];
+                
+                // Get environment index for this try
+                const envOrder = trials[0]?.environmentIndex || getEnvOrderForTry(playerId, tryNumber);
+                const scale = getScaleForTry(playerId, tryNumber);
+                const environmentType = envOrder % 2 === 0 ? "R" : "S";
+                
+                // Process each trial
+                trials.forEach(trial => {
+                    const x = trial.x || trial.tileX || 0;
+                    const y = trial.y || trial.tileY || 0;
+                    const trialNumber = trial.trialNumber || trial.clickNumber || 1;
                     
-                    if (Array.isArray(trialData)) {
-                        // Get scale from localStorage or calculate
-                        const scale = getScaleForTry(monkeyName, tryNum);
+                    // Get cell values
+                    const cellValues = getCellValues(playerId, tryNumber, trialNumber, x, y, scale, envOrder);
+                    
+                    // Use actual pellet count from trial if available
+                    const pelletCount = trial.pelletCount !== undefined ? trial.pelletCount : cellValues.pelletCount;
+                    
+                    processedData.push({
+                        idx: rowIndex++,
+                        x: x,
+                        y: y,
+                        z: cellValues.z,
+                        zscaled: cellValues.zscaled,
+                        trial: trialNumber,
+                        block: tryNumber,
+                        monkeyid: playerId,
+                        scale: scale,
+                        envOrder: envOrder,
+                        pellet_count: Math.min(5, Math.max(1, pelletCount)),
+                        environment: environmentType,
+                        isInitialReveal: trialNumber === 1 ? 1 : 0,
+                        timestamp: trial.timestamp || Date.now()
+                    });
+                });
+            });
+            
+            return processedData;
+        }
+        
+        // Process Level 3 game data
+        function processLevel3GameData(gameData, playerId) {
+            // This is more limited data, but we can still extract some information
+            const processedData = [];
+            
+            if (gameData.gameResults && Array.isArray(gameData.gameResults)) {
+                const tryNumber = gameData.tryNumber || 1;
+                const envOrder = gameData.currentEnvironmentIndex || getEnvOrderForTry(playerId, tryNumber);
+                const scale = getScaleForTry(playerId, tryNumber);
+                const environmentType = envOrder % 2 === 0 ? "R" : "S";
+                
+                gameData.gameResults.forEach((result, index) => {
+                    if (result && typeof result === 'object') {
+                        const x = result.x || (index % 8);
+                        const y = result.y || Math.floor(index / 8);
+                        const trialNumber = index + 1;
                         
-                        // Get environment order from localStorage or calculate
-                        const envOrder = getEnvOrderForTry(monkeyName, tryNum);
+                        const cellValues = getCellValues(playerId, tryNumber, trialNumber, x, y, scale, envOrder);
                         
-                        // Determine environment type (R/S) based on even/odd
-                        const environmentType = envOrder % 2 === 0 ? "R" : "S";
-                        
-                        // Process only the actual completed trials (no fake data generation)
-                        trialData.forEach(trial => {
-                            // Process trial data
-                            const x = trial.tileX;
-                            const y = trial.tileY;
-                            
-                            // Get z-value from localStorage or calculate
-                            const cellValues = getCellValues(monkeyName, tryNum, trial.clickNumber, x, y, scale, envOrder);
-                            
-                            // Use actual pellet count from tile data if available, otherwise calculate from cellValues
-                            const actualPelletCount = trial.pelletCount !== undefined ? trial.pelletCount : cellValues.pelletCount;
-                            cellValues.pelletCount = Math.min(5, Math.max(1, actualPelletCount || 1));
-                            
-                            // Add to export data
-                            exportData.push({
-                                idx: rowIndex++,
-                                x: x,
-                                y: y,
-                                z: cellValues.z,
-                                zscaled: cellValues.zscaled,
-                                trial: trial.clickNumber,
-                                block: tryNum,
-                                monkeyid: monkeyName,
-                                scale: scale,
-                                envOrder: envOrder,
-                                pellet_count: cellValues.pelletCount,
-                                environment: environmentType,
-                                // Properly mark the initial revealed tile (clickNumber=1)
-                                isInitialReveal: trial.clickNumber === 1 ? 1 : 0
-                            });
+                        processedData.push({
+                            idx: index + 1,
+                            x: x,
+                            y: y,
+                            z: cellValues.z,
+                            zscaled: cellValues.zscaled,
+                            trial: trialNumber,
+                            block: tryNumber,
+                            monkeyid: playerId,
+                            scale: scale,
+                            envOrder: envOrder,
+                            pellet_count: result.pelletCount || cellValues.pelletCount,
+                            environment: environmentType,
+                            isInitialReveal: trialNumber === 1 ? 1 : 0,
+                            timestamp: gameData.timestamp || Date.now()
                         });
                     }
-                }
-                
-                // If we have data, update UI
-                if (exportData.length > 0) {
-                    // Get available try numbers
-                    availableTryNumbers = [...new Set(exportData.map(row => row.block))].sort((a, b) => a - b);
-                    
-                    // Populate try number selector
-                    populateTryNumberSelector(availableTryNumbers);
-                    
-                    // Show try selector and enable download and heatmap buttons
-                    tryNumberSelector.style.display = 'block';
-                    downloadCsvButton.disabled = false;
-                    downloadJsonButton.disabled = false;
-                    document.getElementById('showHeatmapButton').disabled = false;
-                    
-                    // Show success
-                    successDiv.textContent = `Retrieved Level 3 data for ${monkeyName} from localStorage (${exportData.length} rows)`;
-                    successDiv.style.display = 'block';
-                    
-                    // Clear error 
-                    errorDiv.style.display = 'none';
-                    
-                    // Filter and display data
-                    filterAndDisplayData();
-                }
-            } catch (error) {
-                console.error("Error retrieving data from localStorage:", error);
-                errorDiv.textContent = error.message || "Error retrieving data from localStorage";
-                errorDiv.style.display = 'block';
+                });
             }
+            
+            return processedData;
+        }
+        
+        // Process legacy tile data for backward compatibility
+        function processLegacyTileData(tileData, playerId) {
+            const processedData = [];
+            let rowIndex = 1;
+            
+            for (const block in tileData) {
+                const tryNum = parseInt(block);
+                const trialData = tileData[block];
+                
+                if (Array.isArray(trialData)) {
+                    const scale = getScaleForTry(playerId, tryNum);
+                    const envOrder = getEnvOrderForTry(playerId, tryNum);
+                    const environmentType = envOrder % 2 === 0 ? "R" : "S";
+                    
+                    trialData.forEach(trial => {
+                        const x = trial.tileX;
+                        const y = trial.tileY;
+                        const cellValues = getCellValues(playerId, tryNum, trial.clickNumber, x, y, scale, envOrder);
+                        
+                        processedData.push({
+                            idx: rowIndex++,
+                            x: x,
+                            y: y,
+                            z: cellValues.z,
+                            zscaled: cellValues.zscaled,
+                            trial: trial.clickNumber,
+                            block: tryNum,
+                            monkeyid: playerId,
+                            scale: scale,
+                            envOrder: envOrder,
+                            pellet_count: trial.pelletCount || cellValues.pelletCount,
+                            environment: environmentType,
+                            isInitialReveal: trial.clickNumber === 1 ? 1 : 0
+                        });
+                    });
+                }
+            }
+            
+            return processedData;
         }
         
         // Process database trial data

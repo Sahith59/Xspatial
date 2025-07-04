@@ -183,459 +183,59 @@
         </div>
     </div>
 
-    <!-- SQL.js Library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
 
     <!-- Game Logic -->
     <script>
-        // Initialize SQL.js
-        let db;
-        let SQL;
-
-        // Initialize the database
-        async function initDatabase() {
-            try {
-                // Initialize SQL.js
-                SQL = await initSqlJs({
-                    locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
-                });
-
-                // Check if there's a saved database state
-                const savedDbData = localStorage.getItem('monkeyGameDb');
-                if (savedDbData) {
-                    const binaryArray = Uint8Array.from(atob(savedDbData), c => c.charCodeAt(0));
-                    db = new SQL.Database(binaryArray);
-                } else {
-                    // Create a new database
-                    db = new SQL.Database();
-
-                    // Create tables
-                    db.run(`
-                    CREATE TABLE IF NOT EXISTS monkeys (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        name TEXT NOT NULL UNIQUE,
-                        species TEXT
-                    );
-
-                    CREATE TABLE IF NOT EXISTS levels (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        monkey_name TEXT NOT NULL,
-                        level INTEGER NOT NULL,
-                        try_number INTEGER NOT NULL,
-                        score INTEGER,
-                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        highest_score INTEGER DEFAULT 0
-                    );
-
-                    CREATE TABLE IF NOT EXISTS trials (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        monkey_name TEXT NOT NULL,
-                        level INTEGER NOT NULL,
-                        trial_number INTEGER NOT NULL,
-                        try_number INTEGER DEFAULT 1,
-                        score INTEGER,
-                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        tileX INTEGER,
-                        tileY INTEGER,
-                        clickCount INTEGER,
-                        reaction_time REAL,
-                        is_initial_reveal INTEGER DEFAULT 0,
-                        environment TEXT,
-                        scale REAL DEFAULT 1.0,
-                        pellet_count INTEGER DEFAULT 0,
-                        raw_z INTEGER,
-                        zscaled INTEGER
-                    );
-
-                    CREATE TABLE IF NOT EXISTS search_history (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        monkey_name TEXT NOT NULL,
-                        level INTEGER NOT NULL,
-                        try_number INTEGER NOT NULL,
-                        history_data TEXT NOT NULL,
-                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    );`);
-                }
-
-                // Define a function to save the database state
-                window.saveDatabase = function() {
-                    try {
-                        const data = db.export();
-                        const bytes = new Uint8Array(data);
-                        let binary = '';
-                        const len = bytes.byteLength;
-                        for (let i = 0; i < len; i++) {
-                            binary += String.fromCharCode(bytes[i]);
-                        }
-                        localStorage.setItem('monkeyGameDb', btoa(binary));
-                        console.log("Database state saved successfully");
-                        return true;
-                    } catch (e) {
-                        console.warn('Failed to save database state:', e);
-                        return false;
-                    }
-                };
-
-                // Save database state periodically
-                setInterval(window.saveDatabase, 10000); // Save every 10 seconds
-
-                console.log("Database initialized successfully");
-                return true;
-            } catch (err) {
-                console.error("Database initialization failed:", err);
-                return false;
-            }
-        }
-
-        // API functions that mimic the Flask server
-        const api = {
-            add_monkey: function(data) {
-                const name = data.name;
-                const species = data.species;
-
-                try {
-                    // Check if monkey already exists
-                    const existingQuery = db.prepare("SELECT name FROM monkeys WHERE name = ?");
-                    existingQuery.bind([name]);
-                    const existing = existingQuery.step() ? existingQuery.getAsObject() : null;
-                    existingQuery.free();
-
-                    if (existing) {
-                        return { message: "Monkey already exists", exists: true };
-                    }
-
-                    // Insert new monkey
-                    const stmt = db.prepare("INSERT INTO monkeys (name, species) VALUES (?, ?)");
-                    stmt.run([name, species]);
-                    stmt.free();
-
-                    return { message: `Monkey ${name} added successfully!`, exists: false };
-                } catch (err) {
-                    console.error("Error adding monkey:", err);
-                    return { error: err.message };
-                }
-            },
-
-            store_level: function(data) {
-                const monkey_name = data.monkey_id;
-                const level = data.level;
-                const score = data.score;
-                const try_number = data.try_number || 1;
-
-                try {
-                    // Insert level data
-                    const stmt = db.prepare("INSERT INTO levels (monkey_name, level, score, try_number) VALUES (?, ?, ?, ?)");
-                    stmt.run([monkey_name, level, score, try_number]);
-                    stmt.free();
-
-                    // Get highest score
-                    const highestQuery = db.prepare("SELECT MAX(score) as max_score FROM levels WHERE monkey_name = ? AND level = ?");
-                    highestQuery.bind([monkey_name, level]);
-                    const highest = highestQuery.step() ? highestQuery.getAsObject() : { max_score: 0 };
-                    highestQuery.free();
-
-                    const current_highest = highest.max_score || 0;
-
-                    if (score > current_highest) {
-                        const updateStmt = db.prepare("UPDATE levels SET highest_score = ? WHERE monkey_name = ? AND level = ?");
-                        updateStmt.run([score, monkey_name, level]);
-                        updateStmt.free();
-                    }
-
-                    return { message: `Level ${level} data stored successfully for Monkey ${monkey_name}!` };
-                } catch (err) {
-                    console.error("Error storing level:", err);
-                    return { error: err.message };
-                }
-            },
-
-            store_trial: function(data) {
-                const monkey_name = data.monkey_id;
-                const level = parseInt(data.level);
-                const trial_number = parseInt(data.trial_number);
-                const try_number = parseInt(data.try_number || 1);
-                const score = data.score;
-
-                // Define maximum trials per level
-                const max_trials = {
-                    1: 10,  // Level 1: 10 trials
-                    2: 20,  // Level 2: 20 trials
-                    3: 25   // Level 3: 25 trials
-                };
-
-                // Validate trial number
-                if (level in max_trials && trial_number > max_trials[level]) {
-                    return { error: `Trial number exceeds maximum for level ${level}` };
-                }
-
-                try {
-                    // Check if trial exists
-                    const existingQuery = db.prepare("SELECT id FROM trials WHERE monkey_name = ? AND level = ? AND try_number = ? AND trial_number = ?");
-                    existingQuery.bind([monkey_name, level, try_number, trial_number]);
-                    const existing = existingQuery.step() ? existingQuery.getAsObject() : null;
-                    existingQuery.free();
-
-                    let message;
-
-                    if (existing) {
-                        // Update existing trial
-                        let updateStmt;
-                        if (data.tileX !== undefined && data.tileY !== undefined && level === 3) {
-                            // Update with tile coordinates for level 3 plus all new fields
-                            const isInitialReveal = (trial_number === 1) ? 1 : 0;
-                            const scale = 1.0; // Default scale value
-                            const pelletCount = score; // Pellets dispensed equals the score
-
-                            // Calculate z value (0-50 scale) and zscaled consistently
-                            const z = Math.round((score / 5) * 50); // Convert 0-5 to 0-50 scale
-                            const zscaled = Math.round(z * scale / 40);
-
-                            updateStmt = db.prepare("UPDATE trials SET score = ?, tileX = ?, tileY = ?, clickCount = ?, reaction_time = ?, is_initial_reveal = ?, environment = ?, scale = ?, pellet_count = ?, raw_z = ?, zscaled = ? WHERE monkey_name = ? AND level = ? AND try_number = ? AND trial_number = ?");
-                            updateStmt.run([score, data.tileX, data.tileY, data.clickCount || 0, data.reaction_time || 0, isInitialReveal, currentEnvironment, scale, pelletCount, z, zscaled, monkey_name, level, try_number, trial_number]);
-                        } else {
-                            // Standard update for other levels
-                            updateStmt = db.prepare("UPDATE trials SET score = ?, reaction_time = ? WHERE monkey_name = ? AND level = ? AND try_number = ? AND trial_number = ?");
-                            updateStmt.run([score, data.reaction_time || 0, monkey_name, level, try_number, trial_number]);
-                        }
-                        updateStmt.free();
-                        message = `Trial ${trial_number} in Level ${level} data updated for Monkey ${monkey_name}!`;
-                    } else {
-                        // Insert new trial with level 3 tile data if available
-                        let insertStmt;
-                        if (data.tileX !== undefined && data.tileY !== undefined && level === 3) {
-                            // For level 3, include tile coordinates, reaction time, initial reveal flag, environment, pellet count, and z values
-                            const isInitialReveal = (trial_number === 1) ? 1 : 0;
-                            const scale = 1.0; // Default scale value
-                            const pelletCount = score; // Pellets dispensed equals the score
-
-                            // Calculate z value (0-50 scale) and zscaled consistently
-                            const z = Math.round((score / 5) * 50); // Convert 0-5 to 0-50 scale
-                            const zscaled = Math.round(z * scale / 40);
-
-                            insertStmt = db.prepare("INSERT INTO trials (monkey_name, level, trial_number, try_number, score, tileX, tileY, clickCount, reaction_time, is_initial_reveal, environment, scale, pellet_count, raw_z, zscaled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                            insertStmt.run([monkey_name, level, trial_number, try_number, score, data.tileX, data.tileY, data.clickCount || 0, data.reaction_time || 0, isInitialReveal, currentEnvironment, scale, pelletCount, z, zscaled]);
-                        } else {
-                            // For other levels, just include the reaction time
-                            insertStmt = db.prepare("INSERT INTO trials (monkey_name, level, trial_number, try_number, score, reaction_time) VALUES (?, ?, ?, ?, ?, ?)");
-                            insertStmt.run([monkey_name, level, trial_number, try_number, score, data.reaction_time || 0]);
-                        }
-                        insertStmt.free();
-                        message = `Trial ${trial_number} in Level ${level} data stored for Monkey ${monkey_name}!`;
-                    }
-
-                    return { message: message };
-                } catch (err) {
-                    console.error("Error managing trial:", err);
-                    return { error: err.message };
-                }
-            },
-
-            check_trial_exists: function(params) {
-                const monkey_name = params.monkey_id;
-                const level = params.level;
-                const try_number = params.try_number;
-                const trial_number = params.trial_number;
-
-                try {
-                    const existingQuery = db.prepare("SELECT id FROM trials WHERE monkey_name = ? AND level = ? AND try_number = ? AND trial_number = ?");
-                    existingQuery.bind([monkey_name, level, try_number, trial_number]);
-                    const exists = existingQuery.step();
-                    existingQuery.free();
-
-                    return { exists: exists };
-                } catch (err) {
-                    console.error("Error checking trial exists:", err);
-                    return { error: err.message };
-                }
-            },
-
-            update_trial: function(data) {
-                const monkey_name = data.monkey_id;
-                const level = data.level;
-                const trial_number = data.trial_number;
-                const try_number = data.try_number || 1;
-                const score = data.score;
-
-                try {
-                    const updateStmt = db.prepare("UPDATE trials SET score = ? WHERE monkey_name = ? AND level = ? AND try_number = ? AND trial_number = ?");
-                    updateStmt.run([score, monkey_name, level, try_number, trial_number]);
-                    updateStmt.free();
-
-                    return { message: `Trial ${trial_number} in Level ${level} data updated successfully for Monkey ${monkey_name}!` };
-                } catch (err) {
-                    console.error("Error updating trial:", err);
-                    return { error: err.message };
-                }
-            },
-
-            get_monkey_details_by_name: function(monkey_name) {
-                try {
-                    // Get monkey details
-                    const monkeyQuery = db.prepare("SELECT name, species FROM monkeys WHERE name = ?");
-                    monkeyQuery.bind([monkey_name]);
-                    const monkey = monkeyQuery.step() ? monkeyQuery.getAsObject() : null;
-                    monkeyQuery.free();
-
-                    if (!monkey) {
-                        return [];
-                    }
-
-                    // Get level data
-                    const levelsQuery = db.prepare(
-                        "SELECT level as level_number, score as level_score, try_number, highest_score " +
-                        "FROM levels WHERE monkey_name = ? ORDER BY level, try_number"
-                    );
-                    levelsQuery.bind([monkey_name]);
-
-                    const levels = [];
-                    while (levelsQuery.step()) {
-                        levels.push(levelsQuery.getAsObject());
-                    }
-                    levelsQuery.free();
-
-                    // Get trial data
-                    const trialsQuery = db.prepare(
-                        "SELECT id as trial_id, level as level_number, trial_number, try_number as trial_try_number, " +
-                        "score as trial_score FROM trials WHERE monkey_name = ? " +
-                        "ORDER BY level_number, trial_try_number, trial_number"
-                    );
-                    trialsQuery.bind([monkey_name]);
-
-                    const trials = [];
-                    while (trialsQuery.step()) {
-                        trials.push(trialsQuery.getAsObject());
-                    }
-                    trialsQuery.free();
-
-                    // Combine the data
-                    const result = [];
-
-                    for (const level of levels) {
-                        const level_dict = Object.assign({}, level);
-                        level_dict.monkey_name = monkey_name;
-                        level_dict.monkey_species = monkey.species;
-                        result.push(level_dict);
-                    }
-
-                    for (const trial of trials) {
-                        const trial_dict = Object.assign({}, trial);
-                        trial_dict.monkey_name = monkey_name;
-                        trial_dict.monkey_species = monkey.species;
-                        result.push(trial_dict);
-                    }
-
-                    if (result.length === 0) {
-                        // Return basic monkey info
-                        result.push({
-                            monkey_name: monkey_name,
-                            monkey_species: monkey.species,
-                            level_number: null,
-                            level_score: null,
-                            try_number: null,
-                            highest_score: null,
-                            trial_number: null,
-                            trial_score: null
-                        });
-                    }
-
-                    return result;
-                } catch (err) {
-                    console.error("Error getting monkey details:", err);
-                    return { error: err.message };
-                }
-            }
+        // Simple game data storage (no database needed)
+        let gameData = {
+            currentPlayer: null,
+            currentLevel: 1,
+            gameStats: [],
+            initialized: false
         };
 
-        // Mock fetch API to route to the in-memory database functions
-        async function mockFetch(url, options = {}) {
-            // Delay to simulate network latency
-            await new Promise(resolve => setTimeout(resolve, 50));
+        // Simple functions for storing game data in localStorage
+        function storeTrialData(score, tileX, tileY, clickCount) {
+            const monkeyId = localStorage.getItem('monkeyId');
+            const gameStats = JSON.parse(localStorage.getItem('gameStats') || '[]');
+            
+            gameStats.push({
+                player: monkeyId,
+                level: currentLevel,
+                trial: clicks,
+                score: score,
+                tileX: tileX,
+                tileY: tileY,
+                clickCount: clickCount,
+                timestamp: new Date().toISOString()
+            });
+            
+            localStorage.setItem('gameStats', JSON.stringify(gameStats));
+            console.log(`Trial ${clicks} data stored: score=${score}`);
+        }
 
-            let response, data;
-
-            // Extract endpoint from URL
-            const endpoint = url.split('/').pop();
-
-            if (url.includes('/add_monkey') && options.method === 'POST') {
-                data = JSON.parse(options.body);
-                response = api.add_monkey(data);
-            } else if (url.includes('/store_level') && options.method === 'POST') {
-                data = JSON.parse(options.body);
-                response = api.store_level(data);
-            } else if (url.includes('/store_trial') && options.method === 'POST') {
-                data = JSON.parse(options.body);
-                response = api.store_trial(data);
-            } else if (url.includes('/check_trial_exists')) {
-                // Parse query parameters
-                const params = {};
-                const searchParams = new URLSearchParams(url.split('?')[1]);
-                for (const [key, value] of searchParams.entries()) {
-                    params[key] = value;
-                }
-                response = api.check_trial_exists(params);
-            } else if (url.includes('/update_trial') && options.method === 'POST') {
-                data = JSON.parse(options.body);
-                response = api.update_trial(data);
-            } else if (url.includes('/get_monkey_details_by_name/')) {
-                const monkey_name = endpoint;
-                response = api.get_monkey_details_by_name(monkey_name);
-            } else if (url.includes('/dispense_pellet') && options.method === 'POST') {
-                // Handle pellet dispenser request
-                data = JSON.parse(options.body);
-                const count = data.count || 1;
-                const exePath = data.exePath || '';
-
-                console.log(`Handling pellet dispense request for ${count} pellet(s)`);
-                console.log(`Pellet.exe path: ${exePath || 'Not specified'}`);
-
-                // Check if this is Windows and path is specified
-                const isWindows = navigator.platform.toLowerCase().includes('win');
-
-                if (isWindows && exePath) {
-                    response = {
-                        status: "success",
-                        pellets_dispensed: count,
-                        method: "hardware",
-                        path: exePath,
-                        message: `Pellet dispensed using ${exePath} on Windows`
-                    };
-                } else {
-                    response = {
-                        status: "success",
-                        pellets_dispensed: count,
-                        method: "simulated",
-                        platform: navigator.platform,
-                        message: `Simulated pellet dispensing (${isWindows ? 'Windows but no path specified' : 'non-Windows platform'})`
-                    };
-                }
+        function storeLevelData(totalScore) {
+            const monkeyId = localStorage.getItem('monkeyId');
+            const levelData = JSON.parse(localStorage.getItem('levelData') || '{}');
+            
+            if (!levelData[monkeyId]) {
+                levelData[monkeyId] = {};
             }
-
-            // Create a Response-like object
-            return {
-                ok: !response.error,
-                json: () => Promise.resolve(response)
+            
+            levelData[monkeyId][`level${currentLevel}`] = {
+                score: totalScore,
+                completed: new Date().toISOString()
             };
+            
+            localStorage.setItem('levelData', JSON.stringify(levelData));
+            console.log(`Level ${currentLevel} completed with score: ${totalScore}`);
         }
 
-        // Override fetch to use mock implementation
-        const originalFetch = window.fetch;
-        window.fetch = function(url, options) {
-            if (url.includes('127.0.0.1:5000') || url.includes('127.0.0.1:5050')) {
-                return mockFetch(url, options);
-            }
-            return originalFetch(url, options);
-        };
 
         // Welcome screen functionality
         document.addEventListener('DOMContentLoaded', async function() {
-            // Initialize game
-            const dbInitialized = await initDatabase();
-
-            if (dbInitialized) {
-                document.getElementById('loading-overlay').style.display = 'none';
-            } else {
-                document.getElementById('loading-message').textContent = 'Failed to initialize game. Please refresh the page.';
-            }
+            // Hide loading overlay - no external data needed
+            document.getElementById('loading-overlay').style.display = 'none';
 
             const input = document.getElementById('monkeyId');
             const startButton = document.getElementById('startButton');
@@ -675,48 +275,64 @@
             errorDiv.style.display = 'none';
 
             try {
-                const response = await fetch('http://127.0.0.1:5000/add_monkey', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*'
-                    },
-                    body: JSON.stringify({
-                        name: monkeyId,
-                        species: 'Unknown'
-                    })
-                });
-
-                if (!response.ok) {
-                    throw new Error('Server error');
-                }
-
-                const data = await response.json();
-
                 // Store the monkey name
                 localStorage.setItem('monkeyId', monkeyId);
 
-                // Create initial game state
-                localStorage.setItem('currentGame', JSON.stringify({
-                    level: 1,
-                    trials: [],
-                    total: 0,
-                    inProgress: true
-                }));
+                // Check browser and suggest Chrome for best experience
+                const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
+                if (!isChrome) {
+                    console.log('💡 For best performance and persistence, consider using Chrome browser');
+                }
+
+                // *** CRITICAL CHECK: If player has already reached Level 3, redirect immediately ***
+                const playerLevel3Key = `playerLevel3Status_${monkeyId}`;
+                const isLevel3Player = localStorage.getItem(playerLevel3Key) === 'true';
+                
+                if (isLevel3Player) {
+                    console.log(`🎯 LEVEL 3 PLAYER DETECTED (${monkeyId}) - Redirecting to testbrowser.html`);
+                    
+                    // Instant redirect with no messages
+                    window.location.href = 'testbrowser.html';
+                    return;
+                }
+
+                // Check for existing saved game state
+                const hasSavedState = loadGameState();
+                
+                if (hasSavedState) {
+                    console.log(`🔄 Resuming saved game for player: ${monkeyId}`);
+                    console.log(`🎯 Continuing Level ${currentLevel}, Trial ${clicks + 1}`);
+                } else {
+                    // Initialize game state for new player or fresh start
+                    currentLevel = 1;
+                    clicks = 0;
+                    gameResults = [];
+                    squares = [];
+                    revealedSquares = new Set();
+                    const tryNumberKey = getUserTryNumberKey(monkeyId);
+                    localStorage.setItem(tryNumberKey, '1');
+                    console.log(`🎯 Starting fresh - Level ${currentLevel}, Try 1 for player: ${monkeyId}`);
+                }
 
                 // Switch to game screen
                 document.getElementById('welcome-screen').style.display = 'none';
                 document.getElementById('game-screen').style.display = 'block';
 
-                // Start the game
+                // Initialize game
                 init();
+                
+                console.log(`🎮 Game started/resumed for player: ${monkeyId}`);
+                
             } catch (error) {
-                console.error('Error:', error);
-                errorDiv.textContent = 'Failed to connect to server. Please try again.';
+                console.error('💥 CRITICAL ERROR starting game:', error);
+                errorDiv.textContent = 'Failed to start game. Check console for details.';
                 errorDiv.style.display = 'block';
                 startButton.disabled = false;
-            } finally {
                 loadingDiv.style.display = 'none';
+                
+                // Switch back to welcome screen
+                document.getElementById('welcome-screen').style.display = 'flex';
+                document.getElementById('game-screen').style.display = 'none';
             }
         }
 
@@ -999,369 +615,15 @@
             }
         }
 
-        // Load the kernelSmooth.json file for level 3
-        let kernelSmoothData = null;
-        let kernelSmoothLoaded = false;
+        // Simple training game - no external data files needed
 
-        // Function to load the kernelSmooth.json file
-        async function loadKernelSmoothData() {
-            try {
-                const response = await fetch('kernelSmooth.json');
-                if (!response.ok) {
-                    throw new Error('Failed to load kernelSmooth.json');
-                }
-                const data = await response.json();
-                kernelSmoothData = data;
-                kernelSmoothLoaded = true;
-                console.log("Successfully loaded kernelSmooth.json data");
-                return true;
-            } catch (error) {
-                console.error("Error loading kernelSmooth.json:", error);
-                console.warn("Will use simulated environment data as fallback");
-                return false;
-            }
+
+        // Simple reward function for training game
+        function getTrainingReward(tileX, tileY) {
+            // Simple random reward for training
+            return Math.random() * 5;
         }
 
-        // Call this function early to start loading the data
-        loadKernelSmoothData();
-
-        // Function to get environment value from kernelSmooth.json
-        function getKernelSmoothValue(x, y) {
-            if (!kernelSmoothLoaded || !kernelSmoothData) {
-                return null;
-            }
-
-            try {
-                // Convert from 1-based (grid positions) to 0-based (array index)
-                const x0 = x - 1;
-                const y0 = y - 1;
-
-                // Calculate the index in the kernelSmooth data
-                // The format appears to be kernelSmoothData[blockIndex][itemIndex]
-                // where itemIndex is calculated from x and y coordinates
-                const index = y0 * 8 + x0;
-
-                // Use the first environment by default (index 0)
-                // This can be modified based on better understanding of the data structure
-                const blockIndex = "0";
-
-                if (kernelSmoothData[blockIndex] && kernelSmoothData[blockIndex][index.toString()]) {
-                    return kernelSmoothData[blockIndex][index.toString()].y;
-                }
-
-                return null;
-            } catch (error) {
-                console.error("Error getting kernel smooth value:", error);
-                return null;
-            }
-        }
-
-        // Function to determine envOrder based on kernelSmooth data and trial/block
-        function determineEnvOrder(tryNumber, trialNumber) {
-            // The original data has envOrder like "11" where first digit is environment type
-            // and second digit is block/session number
-
-            // Determine environment type based on kernelSmooth data if possible
-            if (kernelSmoothLoaded) {
-                // We'll use the tryNumber (mod 4) to select environments as in original experiment:
-                // This cycles through the 4 environments in the kernelSmooth data
-                const envType = (tryNumber % 4) + 1; // 1, 2, 3, 4 corresponding to environment types
-
-                // Combine with try number to create envOrder in the format used in original experiment
-                return parseInt(`${envType}${tryNumber % 10}`);
-            } else {
-                // Fallback: use simple R=0, S=1 logic if kernelSmooth.json isn't available
-                return currentEnvironment === "S" ? 1 : 0;
-            }
-        }
-
-        // Add this function to determine the try number for a level
-        async function getTryNumberForLevel(monkeyId, level) {
-            try {
-                // Fetch the monkey's data
-                const response = await fetch(`http://127.0.0.1:5000/get_monkey_details_by_name/${monkeyId}`);
-                if (!response.ok) {
-                    throw new Error('Failed to fetch monkey data');
-                }
-
-                const data = await response.json();
-
-                // Find the maximum try_number for this level
-                let maxTryNumber = 0;
-
-                data.forEach(entry => {
-                    // Check both levels and trials tables for this level
-                    if (entry.level_number === level && entry.try_number && entry.try_number > maxTryNumber) {
-                        maxTryNumber = entry.try_number;
-                    }
-                    if (entry.level_number === level && entry.trial_try_number && entry.trial_try_number > maxTryNumber) {
-                        maxTryNumber = entry.trial_try_number;
-                    }
-                });
-
-                let newTryNumber = maxTryNumber;
-
-                // Define maximum trials for each level
-                const maxTrials = {
-                    1: 10,  // Level 1: 10 trials
-                    2: 20,  // Level 2: 20 trials
-                    3: 25   // Level 3: 25 trials
-                };
-
-                // When entering a level we need to check if the previous try is complete
-                // Otherwise we continue with the same try number
-                if (level === 3) {
-                    // For level 3, only increment try if the previous try completed all trials
-                    // Count the number of trials for the current max try
-                    let completedTrialsForCurrentTry = 0;
-                    data.forEach(entry => {
-                        if (entry.level_number === level &&
-                            entry.trial_try_number === maxTryNumber &&
-                            entry.trial_number) {
-                            completedTrialsForCurrentTry++;
-                        }
-                    });
-
-                    if (completedTrialsForCurrentTry >= maxTrials[level] || maxTryNumber === 0) {
-                        // Only increment if all trials were completed or this is the first try
-                        newTryNumber = maxTryNumber > 0 ? maxTryNumber + 1 : 1;
-                    } else {
-                        // Otherwise keep the same try number (continue the current attempt)
-                        newTryNumber = maxTryNumber > 0 ? maxTryNumber : 1;
-                    }
-                } else {
-                    // For levels 1 and 2, use the original behavior
-                    newTryNumber = maxTryNumber > 0 ? maxTryNumber + 1 : 1;
-                }
-
-                console.log(`Assigning try number ${newTryNumber} for monkey ${monkeyId} at level ${level}`);
-
-                // Log additional info for level 3
-                if (level === 3) {
-                    console.log(`Level 3 - Previous try: ${maxTryNumber}, New try: ${newTryNumber}`);
-                }
-
-                // Store the try number in both localStorage and sessionStorage
-                // sessionStorage persists only for this browser session
-                localStorage.setItem(`level${level}_tryNumber`, newTryNumber.toString());
-                sessionStorage.setItem(`level${level}_tryNumber_${monkeyId}`, newTryNumber.toString());
-
-                // Also store a list of all try numbers for this monkey and level
-                let tryHistory = JSON.parse(localStorage.getItem(`level${level}_tryHistory_${monkeyId}`) || '[]');
-                if (!tryHistory.includes(newTryNumber)) {
-                    tryHistory.push(newTryNumber);
-                    localStorage.setItem(`level${level}_tryHistory_${monkeyId}`, JSON.stringify(tryHistory));
-                }
-
-                return newTryNumber;
-            } catch (error) {
-                console.error('Error getting try number:', error);
-                return 1; // Default to try 1 if something goes wrong
-            }
-        }
-
-        // Update storeTrialData function to prevent duplicates and track tile coordinates
-        async function storeTrialData(score, tileX, tileY, clickCount) {
-            const monkeyId = localStorage.getItem('monkeyId');
-            const tryNumber = parseInt(localStorage.getItem('currentTryNumber')) || 1;
-
-            try {
-                // First check if this specific trial already exists
-                const checkResponse = await fetch(`http://127.0.0.1:5000/check_trial_exists?monkey_id=${monkeyId}&level=${currentLevel}&try_number=${tryNumber}&trial_number=${clicks}`);
-                const checkData = await checkResponse.json();
-
-                // Get the reaction time if available
-                let reactionTime = 0;
-                if (clickDurations[clicks]) {
-                    reactionTime = clickDurations[clicks].duration;
-                }
-
-                // Prepare data object with extra Level 3 properties if needed
-                const trialData = {
-                    monkey_id: monkeyId,
-                    level: currentLevel,
-                    trial_number: clicks,
-                    try_number: tryNumber,
-                    score: score,
-                    reaction_time: reactionTime
-                };
-
-                // Add tile coordinates for Level 3
-                if (currentLevel === 3 && typeof tileX !== 'undefined' && typeof tileY !== 'undefined') {
-                    trialData.tileX = tileX;
-                    trialData.tileY = tileY;
-                    trialData.clickCount = clickCount || 1;
-
-                    // Store the tile data in localStorage for export
-                    const level3Data = JSON.parse(localStorage.getItem('level3TileData') || '{}');
-                    if (!level3Data[tryNumber]) {
-                        level3Data[tryNumber] = [];
-                    }
-
-                    // Calculate normalized z value
-                    const z = score / 5; // Normalize to 0-1 range
-                    const scale = 1.0; // Default scale value
-                    const zscaled = z * scale;
-
-                    // Calculate envOrder using the kernelSmooth data
-                    const envOrder = determineEnvOrder(tryNumber, clicks);
-
-                    // Calculate raw points (this will be consistent now)
-                    const rawScore = score; // Store the original score value (between 0-5)
-
-                    // Calculate z value (0-50 scale) - save the exact same value every time
-                    const rawZ = Math.round(z * 50); // Convert 0-1 to 0-50 scale
-
-                    // Store pellet count - how many pellets would be dispensed
-                    const pelletCount = score; // Typically matches the score value (1-5)
-
-                    // Add or update this click's data with all required variables
-                    level3Data[tryNumber].push({
-                        monkeyname: monkeyId,
-                        block: tryNumber,
-                        trial: clicks,
-                        clickNumber: clicks,
-                        x: tileX,
-                        y: tileY,
-                        z: rawZ, // Consistent value (0-50)
-                        zscaled: zscaled,
-                        scale: scale,
-                        envOrder: envOrder,
-                        environment: currentEnvironment,
-                        tileX: tileX,
-                        tileY: tileY,
-                        clickCount: clickCount || 1,
-                        rewardValue: z,
-                        gridPosition: tileY * 8 + tileX, // Position in grid (0-63)
-                        reactionTime: reactionTime, // Store reaction time in ms
-                        isInitialReveal: clicks === 1 ? 1 : 0, // Mark first tile as auto-revealed
-                        rawScore: rawScore, // Original score (0-5)
-                        pelletCount: pelletCount // Number of pellets dispensed
-                    });
-
-                    localStorage.setItem('level3TileData', JSON.stringify(level3Data));
-                }
-
-                if (checkData.exists) {
-                    // Update existing trial instead of creating a new one
-                    const updateResponse = await fetch('http://127.0.0.1:5000/update_trial', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Access-Control-Allow-Origin': '*'
-                        },
-                        body: JSON.stringify(trialData)
-                    });
-
-                    if (!updateResponse.ok) {
-                        throw new Error('Failed to update trial data');
-                    }
-
-                    console.log('Trial data updated successfully');
-                } else {
-                    // Create new trial record
-                    const response = await fetch('http://127.0.0.1:5000/store_trial', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Access-Control-Allow-Origin': '*'
-                        },
-                        body: JSON.stringify(trialData)
-                    });
-
-                    if (!response.ok) {
-                        throw new Error('Failed to store trial data');
-                    }
-
-                    console.log('Trial data stored successfully');
-                    if (currentLevel === 3) {
-                        console.log(`Stored Level 3 tile data: (${tileX}, ${tileY}) - Click #${clickCount || 1}`);
-                    }
-                    return true; // Make sure to return a value for the Promise chain
-                }
-            } catch (error) {
-                console.error('Error managing trial data:', error);
-            }
-        }
-
-        async function storeLevelData(totalScore) {
-            const monkeyId = localStorage.getItem('monkeyId');
-            try {
-                // Get the current try number for this level
-                const response = await fetch(`http://127.0.0.1:5000/get_monkey_details_by_name/${monkeyId}`);
-                const data = await response.json();
-
-                // Calculate the next try number for this level
-                let currentTryNumber = 1;
-                data.forEach(entry => {
-                    if (entry.level_number === currentLevel) {
-                        currentTryNumber = Math.max(currentTryNumber, (entry.try_number || 0) + 1);
-                    }
-                });
-
-                const levelResponse = await fetch('http://127.0.0.1:5000/store_level', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*'
-                    },
-                    body: JSON.stringify({
-                        monkey_id: monkeyId,
-                        level: currentLevel,
-                        score: totalScore,
-                        try_number: currentTryNumber
-                    })
-                });
-
-                if (!levelResponse.ok) {
-                    throw new Error('Failed to store level data');
-                }
-
-                // Update local storage with new try number
-                localStorage.setItem('currentTryNumber', currentTryNumber.toString());
-
-                console.log('Level data stored successfully');
-            } catch (error) {
-                console.error('Error storing level data:', error);
-            }
-        }
-
-        async function getMonkeyProgress() {
-            const monkeyId = localStorage.getItem('monkeyId');
-            try {
-                const response = await fetch(`http://127.0.0.1:5000/get_monkey_details_by_name/${monkeyId}`);
-                if (!response.ok) {
-                    throw new Error('Failed to fetch monkey progress');
-                }
-
-                const data = await response.json();
-                let maxLevel = 1;
-                let passedLevel2 = false;
-
-                // Process the data to determine the highest level passed
-                data.forEach(entry => {
-                    if (entry.level_number && entry.level_score) {
-                        if (entry.level_number === 1 && entry.level_score >= MIN_SCORE_FOR_LEVEL2) {
-                            maxLevel = Math.max(maxLevel, 2);
-                        }
-                        if (entry.level_number === 2 && entry.level_score >= MIN_SCORE_FOR_LEVEL3) {
-                            maxLevel = 3;
-                            passedLevel2 = true;
-                        }
-                    }
-                });
-
-                currentLevel = maxLevel;
-                hasPassedLevel2 = passedLevel2;
-
-                // Get or determine the try number for this level
-                const tryNumber = await getTryNumberForLevel(monkeyId, currentLevel);
-                localStorage.setItem('currentTryNumber', tryNumber.toString());
-
-            } catch (error) {
-                console.error('Error fetching monkey progress:', error);
-            }
-        }
 
         // Initialize canvas and context
         let canvas, ctx;
@@ -1378,7 +640,6 @@
         let squareColors = [];
         let revealedSquares = new Set();
         let level1BestScore = 0;
-        let currentEnvironment = '';
         let gridSquares = [];
         let hasPassedLevel2 = false;
         let SQUARE_SIZE;
@@ -1390,15 +651,12 @@
         // Constants
         const MAX_CLICKS = 10;
         const ITI_DURATION = 500;
-        const BLANK_SCREEN_DURATION = 60000;
+        const BLANK_SCREEN_DURATION = 30000; // 30 seconds between levels
         const ANIMATION_DURATION = 200;
         const REVEAL_ANIMATION_DURATION = 500;
         const MIN_SCORE_FOR_LEVEL2 = 40;
-        const MIN_SCORE_FOR_LEVEL3 = 40;
+        const MIN_SCORE_FOR_LEVEL3 = 80; // Need 80% of max possible score in Level 2
         const GRID_SIZE = 8;
-        const LEVEL3_TRIALS = 25; // User selectable trials in Level 3
-        const LEVEL3_TOTAL_TRIALS = 26; // Total trials including the initial auto-revealed tile
-        const BLANK_SCREEN_DURATION_LEVEL3 = 180000;
 
         // Add this new constant for Level 2 trials
         const LEVEL2_TRIALS = 20;
@@ -1409,11 +667,8 @@
                 return MAX_CLICKS;       // Level 1: 10 trials
             } else if (level === 2) {
                 return LEVEL2_TRIALS;    // Level 2: 20 trials
-            } else {
-                // For Level 3, return the actual number of clickable trials (25)
-                // This ensures the user gets to select 25 tiles (plus 1 auto-revealed)
-                return LEVEL3_TRIALS;    // Level 3: 25 clickable trials
             }
+            return MAX_CLICKS; // Fallback
         }
 
         const ENVIRONMENT_TYPES = {
@@ -1428,6 +683,145 @@
             '#E67550',
             '#CC4433'
         ];
+
+        // ========== USER-SPECIFIC PERSISTENT GAME STATE FUNCTIONS ==========
+        
+        function getUserGameStateKey(playerId) {
+            return `browserGameState_${playerId}`;
+        }
+
+        function getUserTrialResultsKey(playerId) {
+            return `allTrialResults_${playerId}`;
+        }
+
+        function getUserTryNumberKey(playerId) {
+            return `currentTryNumber_${playerId}`;
+        }
+
+        function saveGameState() {
+            const playerId = localStorage.getItem('monkeyId');
+            if (!playerId) {
+                console.warn('⚠️ No playerId found - cannot save game state');
+                return;
+            }
+
+            const gameState = {
+                currentLevel: currentLevel,
+                clicks: clicks,
+                squares: squares.map(square => ({
+                    x: square.x,
+                    y: square.y,
+                    value: square.value,
+                    color: square.color,
+                    isRevealed: square.isRevealed,
+                    isClickable: square.isClickable
+                })),
+                revealedSquares: Array.from(revealedSquares),
+                gameActive: gameActive,
+                gameResults: gameResults,
+                sunPosition: sunPosition,
+                timestamp: Date.now(),
+                playerId: playerId
+            };
+            
+            const key = getUserGameStateKey(playerId);
+            localStorage.setItem(key, JSON.stringify(gameState));
+            console.log(`🔄 Game state saved for ${playerId}:`, gameState);
+        }
+
+        function loadGameState() {
+            try {
+                const playerId = localStorage.getItem('monkeyId');
+                if (!playerId) {
+                    console.log('📝 No playerId found - starting fresh');
+                    return false;
+                }
+
+                const key = getUserGameStateKey(playerId);
+                const savedState = localStorage.getItem(key);
+                if (!savedState) {
+                    console.log(`📝 No saved game state found for ${playerId} - starting fresh`);
+                    return false;
+                }
+
+                const gameState = JSON.parse(savedState);
+                
+                // Check if state belongs to current player
+                if (gameState.playerId !== playerId) {
+                    console.log(`⚠️ Game state belongs to different player (${gameState.playerId}) - starting fresh for ${playerId}`);
+                    return false;
+                }
+                
+                // Check if state is recent (within 24 hours)
+                const hoursSinceLastSave = (Date.now() - gameState.timestamp) / (1000 * 60 * 60);
+                if (hoursSinceLastSave > 24) {
+                    console.log(`⏰ Saved state too old for ${playerId} - starting fresh`);
+                    localStorage.removeItem(key);
+                    return false;
+                }
+
+                // Restore game state
+                currentLevel = gameState.currentLevel || 1;
+                clicks = gameState.clicks || 0;
+                gameActive = gameState.gameActive !== undefined ? gameState.gameActive : true;
+                gameResults = gameState.gameResults || [];
+                sunPosition = gameState.sunPosition || 0;
+                revealedSquares = new Set(gameState.revealedSquares || []);
+                
+                // Restore squares if they exist
+                if (gameState.squares && gameState.squares.length > 0) {
+                    squares = gameState.squares.map(square => ({
+                        x: square.x,
+                        y: square.y,
+                        value: square.value,
+                        color: square.color,
+                        isRevealed: square.isRevealed !== undefined ? square.isRevealed : false,
+                        isClickable: square.isClickable !== undefined ? square.isClickable : true
+                    }));
+                }
+
+                console.log(`✅ Game state restored for ${playerId}:`, gameState);
+                console.log(`🎯 Continuing Level ${currentLevel}, Trial ${clicks + 1}`);
+                return true;
+            } catch (error) {
+                console.error('❌ Error loading game state:', error);
+                const playerId = localStorage.getItem('monkeyId');
+                if (playerId) {
+                    localStorage.removeItem(getUserGameStateKey(playerId));
+                }
+                return false;
+            }
+        }
+
+        function clearGameState() {
+            const playerId = localStorage.getItem('monkeyId');
+            if (playerId) {
+                localStorage.removeItem(getUserGameStateKey(playerId));
+                console.log(`🗑️ Game state cleared for ${playerId}`);
+            }
+        }
+
+        function saveTrialResult(score, trialNumber) {
+            const playerId = localStorage.getItem('monkeyId');
+            if (!playerId) return;
+
+            // Save individual trial result
+            const trialData = {
+                level: currentLevel,
+                trial: trialNumber,
+                score: score,
+                timestamp: Date.now(),
+                playerId: playerId
+            };
+            
+            const key = getUserTrialResultsKey(playerId);
+            let allTrials = JSON.parse(localStorage.getItem(key) || '[]');
+            allTrials.push(trialData);
+            localStorage.setItem(key, JSON.stringify(allTrials));
+            
+            // Also save current game progress
+            saveGameState();
+        }
 
         // Function to toggle fullscreen
         function toggleFullScreen() {
@@ -1452,9 +846,7 @@
         // Initialize sizes based on screen dimensions
         function initializeSizes() {
             const minDimension = Math.min(window.innerWidth, window.innerHeight);
-            SQUARE_SIZE = currentLevel === 3
-                ? minDimension * 0.08
-                : minDimension * 0.1;
+            SQUARE_SIZE = minDimension * 0.1;
             SUN_MARGIN = SQUARE_SIZE;
         }
 
@@ -1487,20 +879,7 @@
             const widthRatio = canvas.width / oldWidth;
             const heightRatio = canvas.height / oldHeight;
 
-            if (currentLevel === 3) {
-                const margin = SQUARE_SIZE * 0.2;
-                const gridWidth = GRID_SIZE * (SQUARE_SIZE + margin) - margin;
-                const gridHeight = GRID_SIZE * (SQUARE_SIZE + margin) - margin;
-                const startX = (canvas.width - gridWidth) / 2;
-                const startY = (canvas.height - gridHeight) / 2;
-
-                squares.forEach((square, index) => {
-                    const row = Math.floor(index / GRID_SIZE);
-                    const col = index % GRID_SIZE;
-                    square.x = startX + col * (SQUARE_SIZE + margin);
-                    square.y = startY + row * (SQUARE_SIZE + margin);
-                });
-            } else if (currentLevel === 2) {
+            if (currentLevel === 2) {
                 const positions = getFixedPositions();
                 squares.forEach((square, index) => {
                     square.x = positions[index].x;
@@ -1619,7 +998,7 @@
         function checkOverlap(pos, existingSquares) {
             const minDistance = SQUARE_SIZE * 2.5;
 
-            const maxClicks = currentLevel === 3 ? LEVEL3_TRIALS : MAX_CLICKS;
+            const maxClicks = MAX_CLICKS;
             const sunX = 50 + (canvas.width - 100) * (sunPosition / maxClicks);
             const sunY = 30;
             const sunRadius = 40;
@@ -1641,140 +1020,13 @@
             return false;
         }
 
-        // Create grid for level 3
-        function createLevel3Grid(environmentType) {
-            const grid = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(null));
-            const values = [];
-            const tryNumber = parseInt(localStorage.getItem('currentTryNumber')) || 1;
-
-            // Check if kernelSmooth data is available
-            if (kernelSmoothLoaded && kernelSmoothData) {
-                console.log("Using kernelSmooth data for environment type generation");
-
-                // Determine which environment to use (0-3) based on try number
-                // This cycles through the 4 environments in the kernelSmooth data
-                const envIndex = (tryNumber % 4).toString();
-
-                // Fill grid using kernelSmooth data
-                for (let i = 0; i < GRID_SIZE; i++) {
-                    for (let j = 0; j < GRID_SIZE; j++) {
-                        // Calculate index in kernelSmooth format
-                        const index = i * GRID_SIZE + j;
-
-                        if (kernelSmoothData[envIndex] && kernelSmoothData[envIndex][index.toString()]) {
-                            // Get y value from kernelSmooth (normalized 0-1 value)
-                            const normalizedValue = kernelSmoothData[envIndex][index.toString()].y;
-
-                            // Convert to a point value (1-5 scale)
-                            // Normalize to 1-5 range for the game
-                            const pointValue = Math.max(1, Math.min(5, Math.round(normalizedValue * 5)));
-                            grid[i][j] = pointValue;
-                            console.log(`Grid[${i}][${j}] = ${pointValue} (from kernelSmooth value ${normalizedValue})`);
-                        } else {
-                            // Fallback if data not found for this position
-                            grid[i][j] = Math.floor(Math.random() * 5) + 1;
-                            console.warn(`No kernelSmooth data for grid[${i}][${j}], using random value`);
-                        }
-                    }
-                }
-
-                // Display environment type in console
-                console.log(`Using environment ${envIndex} from kernelSmooth data (try ${tryNumber})`);
-
-                // Update the current environment indicator
-                if (parseInt(envIndex) % 2 === 0) {
-                    currentEnvironment = ENVIRONMENT_TYPES.ROUGH; // Even environments are rough
-                } else {
-                    currentEnvironment = ENVIRONMENT_TYPES.SMOOTH; // Odd environments are smooth
-                }
-
-                return grid;
-            } else {
-                console.log("Using simulated environment generation (kernelSmooth data not available)");
-
-                // Fallback to original simulation logic
-                for (let i = 1; i <= 5; i++) {
-                    const count = Math.floor(GRID_SIZE * GRID_SIZE / 5);
-                    values.push(...Array(count).fill(i));
-                }
-
-                while (values.length < GRID_SIZE * GRID_SIZE) {
-                    values.push(Math.floor(Math.random() * 5) + 1);
-                }
-
-                if (environmentType === ENVIRONMENT_TYPES.SMOOTH) {
-                    values.sort((a, b) => b - a);
-                } else {
-                    for (let i = values.length - 1; i > 0; i--) {
-                        const j = Math.floor(Math.random() * (i + 1));
-                        [values[i], values[j]] = [values[j], values[i]];
-                    }
-                }
-
-                let index = 0;
-                for (let i = 0; i < GRID_SIZE; i++) {
-                    for (let j = 0; j < GRID_SIZE; j++) {
-                        grid[i][j] = values[index++];
-                    }
-                }
-
-                return grid;
-            }
-        }
 
         // Initialize squares with improved positioning
         function initializeSquares() {
             squares = [];
             squareColors = [];
 
-            if (currentLevel === 3) {
-                // Environment type will be determined inside createLevel3Grid based on kernelSmooth data
-                const grid = createLevel3Grid();
-                const margin = SQUARE_SIZE * 0.2;
-                const gridWidth = GRID_SIZE * (SQUARE_SIZE + margin) - margin;
-                const gridHeight = GRID_SIZE * (SQUARE_SIZE + margin) - margin;
-                const startX = (canvas.width - gridWidth) / 2;
-                const startY = (canvas.height - gridHeight) / 2;
-
-                // Initialize the click count tracker for Level 3 grid
-                if (!window.level3ClickTracker) {
-                    window.level3ClickTracker = {};
-                }
-
-                for (let i = 0; i < GRID_SIZE; i++) {
-                    for (let j = 0; j < GRID_SIZE; j++) {
-                        const value = grid[i][j];
-                        const x = startX + j * (SQUARE_SIZE + margin);
-                        const y = startY + i * (SQUARE_SIZE + margin);
-
-                        // Generate a unique ID for this tile
-                        const tileId = `tile_${i}_${j}`;
-
-                        // Initialize or retrieve click counter for this square
-                        if (!window.level3ClickTracker[tileId]) {
-                            window.level3ClickTracker[tileId] = {
-                                clickCount: 0
-                            };
-                        }
-
-                        squares.push({
-                            x,
-                            y,
-                            value,
-                            points: value,
-                            color: '#FFFFFF',
-                            scale: 1,
-                            isAnimating: false,
-                            isRevealed: false,
-                            tileX: j,   // Column (0-7) - matches 2D array indexing
-                            tileY: i,   // Row (0-7) - matches 2D array indexing
-                            tileId: tileId, // Unique identifier for this tile
-                            clickCount: window.level3ClickTracker[tileId].clickCount
-                        });
-                        squareColors.push(COLORS[value - 1]);
-                    }
-                }
-            } else if (currentLevel === 2) {
+            if (currentLevel === 2) {
                 const positions = getFixedPositions();
                 const values = [1, 2, 3, 4, 5];
 
@@ -1910,7 +1162,7 @@
                     square.isRevealed = true;
                     revealedSquares.add(squares.indexOf(square));
 
-                    // No additional animation for Level 2 - use same reveal style as Level 3
+                    // Standard animation for Level 2
                 }
             }
 
@@ -2000,19 +1252,15 @@
                     startClickTimer();
                 }
 
-                if (currentLevel === 3) {
-                    ctx.font = '20px Arial';
-                    ctx.fillStyle = '#fff';
-                    ctx.textAlign = 'right';
-                    ctx.fillText(currentEnvironment, canvas.width - 20, canvas.height - 20);
-                }
 
                 // Draw level and try counter with updated format
-                const currentTryNumber = parseInt(localStorage.getItem('currentTryNumber')) || 1;
+                const playerId = localStorage.getItem('monkeyId');
+                const tryNumberKey = playerId ? getUserTryNumberKey(playerId) : 'currentTryNumber';
+                const currentTryNumber = parseInt(localStorage.getItem(tryNumberKey)) || 1;
                 ctx.font = '20px Arial';
                 ctx.fillStyle = '#fff';
                 ctx.textAlign = 'left';
-                ctx.fillText(`L-${currentLevel} : ${currentTryNumber}`, 20, canvas.height - 20);
+                ctx.fillText(`L-${currentLevel}:${currentTryNumber}`, 20, canvas.height - 20);
             }
         }
 
@@ -2028,6 +1276,8 @@
             currentGame.trials.push(score);
             currentGame.total = currentGame.trials.reduce((sum, score) => sum + score, 0);
             currentGame.level = currentLevel;
+
+            console.log(`📈 Score updated: +${score} points. Trial ${currentGame.trials.length}/${getTrialCount(currentLevel)}. Total: ${currentGame.total}`);
 
             localStorage.setItem('currentGame', JSON.stringify(currentGame));
             localStorage.setItem('scoreUpdate', Date.now().toString());
@@ -2047,7 +1297,7 @@
             } else if (currentLevel === 2) {
                 maxClicks = LEVEL2_TRIALS;  // Level 2: 20 trials
             } else {
-                maxClicks = LEVEL3_TRIALS;  // Level 3: 25 trials
+                maxClicks = MAX_CLICKS;  // Default fallback
             }
 
             squares.forEach((square, index) => {
@@ -2055,14 +1305,7 @@
                     y >= square.y && y <= square.y + SQUARE_SIZE) {
 
                     clicks++;
-                    if (currentLevel === 3) {
-                        // For level 3, we start with 1 tile already revealed but sun at position 0
-                        // So we need to increment sunPosition to match actual user clicks (not trials)
-                        sunPosition++;
-                    } else {
-                        // For other levels, sunPosition matches clicks
-                        sunPosition = clicks;
-                    }
+                    sunPosition = clicks;
                     isWaiting = true;
 
                     // Record reaction time
@@ -2071,14 +1314,6 @@
 
                     let points = square.points;
 
-                    // For Level 3, track clicks on each square
-                    if (currentLevel === 3 && square.tileId) {
-                        // Increment click count for this specific square
-                        window.level3ClickTracker[square.tileId].clickCount++;
-                        square.clickCount = window.level3ClickTracker[square.tileId].clickCount;
-
-                        console.log(`Clicked tile (${square.tileX}, ${square.tileY}) - Click #${square.clickCount}`);
-                    }
 
                     // Play correct sound the number of times equal to points (always play regardless of pellet dispenser)
                     console.log(`Square clicked! Points: ${points}, calling playCorrectSound...`);
@@ -2104,62 +1339,27 @@
                                 duration: 150     // Faster animation
                             });
                         }
-                    } else if (currentLevel === 3) {
-                        if (!square.isRevealed) {
-                            // For level 3, handle first reveal differently to avoid double flash
-                            revealSquare(square);
-                            // Don't do additional animation on first reveal for level 3
-                        } else {
-                            // Only animate already revealed squares in level 3
-                            animateSquare(square, {
-                                amplitude: 0.1,   // Smaller bounce (10% scale)
-                                duration: 150     // Faster animation
-                            });
-                        }
                     }
 
                     updateGameScore(points);
 
-                    // For level 3, pass the tile coordinates and click count
-                    if (currentLevel === 3) {
-                        storeTrialData(points, square.tileX, square.tileY, square.clickCount).then(() => {
-                            // Save database state after each trial
-                            window.saveDatabase();
-                        }).catch(error => {
-                            console.error('Failed to store trial data:', error);
-                        });
-                    } else {
-                        storeTrialData(points).then(() => {
-                            // Save database state after each trial
-                            window.saveDatabase();
-                        }).catch(error => {
-                            console.error('Failed to store trial data:', error);
-                        });
-                    }
+                    storeTrialData(points, square.tileX || 0, square.tileY || 0, 1);
+
+                    // Save game state after each click
+                    saveGameState();
+                    saveTrialResult(points, clicks);
 
                     setTimeout(() => {
                         isWaiting = false;
 
                         // Check if we've completed all trials for the current level
-                        // For Level 3, we track 25 user-selected tiles + 1 auto-revealed = 26 total
-                        // But the clicks counter starts at 1 after the auto-reveal, so we need to check for 26
                         const maxClicksToCheck = getTrialCount(currentLevel);
 
-                        // For Level 3, we need to add 1 to account for the auto-reveal
-                        // This ensures the user gets to make all 25 clicks
-                        if (currentLevel === 3) {
-                            if (clicks > maxClicksToCheck) {
-                                handleGameCompletion();
-                            } else {
-                                resetSquareAnimations();
-                            }
+                        // Standard logic for all levels
+                        if (clicks >= maxClicksToCheck) {
+                            handleGameCompletion();
                         } else {
-                            // For Levels 1 and 2, use standard logic
-                            if (clicks >= maxClicksToCheck) {
-                                handleGameCompletion();
-                            } else {
-                                resetSquareAnimations();
-                            }
+                            resetSquareAnimations();
                         }
                     }, ITI_DURATION);
                 }
@@ -2168,76 +1368,195 @@
 
         // Modified handleGameCompletion function
         function handleGameCompletion() {
+            console.log(`🏁 Game completion triggered for Level ${currentLevel}`);
             gameActive = false;
 
-            const currentGame = JSON.parse(localStorage.getItem('currentGame'));
+            // Get current game data or create default
+            let currentGame = JSON.parse(localStorage.getItem('currentGame')) || {
+                level: currentLevel,
+                trials: [],
+                total: 0,
+                inProgress: true
+            };
 
-            // Make sure we only count the correct number of trials
-            let maxTrials;
-
-            // For Level 3, we need to use LEVEL3_TOTAL_TRIALS to include the auto-revealed first tile
-            if (currentLevel === 3) {
-                maxTrials = LEVEL3_TOTAL_TRIALS; // 26 trials in total (1 auto-revealed + 25 user selected)
-            } else {
-                maxTrials = getTrialCount(currentLevel);
+            // Make sure we have trials data
+            if (!currentGame.trials || currentGame.trials.length === 0) {
+                console.warn('No trials data found, creating empty array');
+                currentGame.trials = [];
             }
 
-            const validTrials = currentGame.trials.slice(0, maxTrials);
-            const totalScore = validTrials.reduce((sum, score) => sum + score, 0);
+            // Calculate total score from trials
+            const totalScore = currentGame.trials.reduce((sum, score) => sum + score, 0);
+            console.log(`📊 Level ${currentLevel} completed with score: ${totalScore}`);
 
-            // Update the current game with the correct number of trials
-            currentGame.trials = validTrials;
-            currentGame.total = totalScore;
-            localStorage.setItem('currentGame', JSON.stringify(currentGame));
+            // Store level completion data
+            storeLevelData(totalScore);
 
-            if (currentLevel === 1) {
-                level1BestScore = Math.max(level1BestScore, totalScore);
-            } else if (currentLevel === 2 && totalScore >= MIN_SCORE_FOR_LEVEL3) {
-                hasPassedLevel2 = true;
-            }
-
-            storeLevelData(totalScore).catch(error => {
-                console.error('Failed to store level data:', error);
-            });
-
-            // Manually save database state immediately
-            saveDatabase();
-
+            // Save game session
+            const playerId = localStorage.getItem('monkeyId');
+            const tryNumberKey = playerId ? getUserTryNumberKey(playerId) : 'currentTryNumber';
             const gameSession = {
-                monkeyId: localStorage.getItem('monkeyId'),
+                monkeyId: playerId,
                 level: currentLevel,
                 trials: currentGame.trials,
                 totalScore: totalScore,
                 timestamp: new Date().toISOString(),
-                environment: currentLevel === 3 ? currentEnvironment : undefined
+                tryNumber: parseInt(localStorage.getItem(tryNumberKey)) || 1
             };
 
             let allSessions = JSON.parse(localStorage.getItem('allGameSessions')) || [];
             allSessions.push(gameSession);
             localStorage.setItem('allGameSessions', JSON.stringify(allSessions));
 
+            // Mark game as completed
             currentGame.inProgress = false;
             localStorage.setItem('currentGame', JSON.stringify(currentGame));
 
-            // Immediately clear all squares
+            // Clear all squares
             squares = [];
 
-            setTimeout(() => {
-                ctx.fillStyle = '#000';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            // Determine next action based on level and score
+            let nextAction = '';
+            let advanceToLevel2 = false;
+            let advanceToLevel3 = false;
+            let retryCurrentLevel = false;
 
-                if (currentLevel === 1 && totalScore >= MIN_SCORE_FOR_LEVEL2) {
-                    currentLevel = 2;
-                    resetGame();
-                } else if (currentLevel === 2 && totalScore >= MIN_SCORE_FOR_LEVEL3) {
-                    currentLevel = 3;
-                    resetGame();
-                } else if (currentLevel === 3 && hasPassedLevel2) {
-                    resetGame();
+            if (currentLevel === 1) {
+                if (totalScore >= MIN_SCORE_FOR_LEVEL2) {
+                    // Passed Level 1 - advance to Level 2
+                    nextAction = `🎉 Level 1 Complete!\nScore: ${totalScore}/${MIN_SCORE_FOR_LEVEL2}\n\nAdvancing to Level 2...`;
+                    advanceToLevel2 = true;
+                    console.log(`✅ ADVANCING TO LEVEL 2! Score: ${totalScore} >= ${MIN_SCORE_FOR_LEVEL2}`);
                 } else {
+                    // Failed Level 1 - retry
+                    const nextTry = (parseInt(localStorage.getItem(tryNumberKey)) || 1) + 1;
+                    nextAction = `❌ Level 1 Failed\nScore: ${totalScore}/${MIN_SCORE_FOR_LEVEL2}\n\nRetrying Level 1 (Try ${nextTry})...`;
+                    retryCurrentLevel = true;
+                    console.log(`❌ RETRYING LEVEL 1! Score: ${totalScore} < ${MIN_SCORE_FOR_LEVEL2}`);
+                }
+            } else if (currentLevel === 2) {
+                // Level 2 completed - check for Level 3 advancement
+                if (totalScore >= MIN_SCORE_FOR_LEVEL3) {
+                    // Qualified for Level 3 - redirect to testbrowser.html
+                    nextAction = `🎉 Level 2 Complete!\nScore: ${totalScore}/${MIN_SCORE_FOR_LEVEL3}\n\nAdvancing to Level 3...`;
+                    advanceToLevel3 = true;
+                    console.log(`🚀 ADVANCING TO LEVEL 3! Score: ${totalScore} >= ${MIN_SCORE_FOR_LEVEL3}`);
+                } else {
+                    // Failed Level 2 - restart Level 2
+                    const nextTry = (parseInt(localStorage.getItem(tryNumberKey)) || 1) + 1;
+                    nextAction = `❌ Level 2 Failed\nScore: ${totalScore}/${MIN_SCORE_FOR_LEVEL3}\n\nRestarting Level 2 (Try ${nextTry})...`;
+                    retryCurrentLevel = true;
+                    console.log(`❌ RESTARTING LEVEL 2! Score: ${totalScore} < ${MIN_SCORE_FOR_LEVEL3}`);
+                }
+            }
+
+            // Show transition screen
+            showTransitionScreen(nextAction);
+
+            // Execute transition after delay
+            setTimeout(() => {
+                const playerId = localStorage.getItem('monkeyId');
+                const tryNumberKey = playerId ? getUserTryNumberKey(playerId) : 'currentTryNumber';
+                
+                if (advanceToLevel2) {
+                    currentLevel = 2;
+                    clicks = 0; // Reset clicks for new level
+                    localStorage.setItem(tryNumberKey, '1');
+                    console.log(`🎯 SETTING LEVEL 2, TRY 1 for ${playerId}`);
+                    // Clear previous game state since we're advancing
+                    clearGameState();
+                    resetGame();
+                } else if (advanceToLevel3) {
+                    // Advance to Level 3 - redirect to testbrowser.html
+                    console.log(`🚀 ADVANCING TO LEVEL 3 - Redirecting to testbrowser.html (Player: ${playerId})`);
+                    // Clear ALL browser game state since player is now permanently Level 3
+                    clearGameState();
+                    if (playerId) {
+                        localStorage.removeItem(`currentGame_${playerId}`);
+                        localStorage.removeItem(`allGameSessions_${playerId}`);
+                        localStorage.removeItem(tryNumberKey);
+                    }
+                    console.log(`🗑️ Cleared all Levels 1-2 data for ${playerId} - player is now permanently Level 3`);
+                    advanceToLevel3Handler(totalScore);
+                } else if (retryCurrentLevel) {
+                    incrementTryNumber();
+                    clicks = 0; // Reset clicks for retry
+                    const newTryNumber = parseInt(localStorage.getItem(tryNumberKey)) || 1;
+                    console.log(`🔄 Starting Level ${currentLevel}, Try ${newTryNumber} for ${playerId}`);
+                    // Clear game state for fresh retry
+                    clearGameState();
                     resetGame();
                 }
-            }, currentLevel === 3 ? BLANK_SCREEN_DURATION_LEVEL3 : BLANK_SCREEN_DURATION);
+                
+                // Save the new state after transitions
+                saveGameState();
+            }, BLANK_SCREEN_DURATION);
+        }
+
+        // Function to show transition screen
+        function showTransitionScreen(message) {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.font = '32px Arial';
+            ctx.fillStyle = '#fff';
+            ctx.textAlign = 'center';
+            
+            const lines = message.split('\n');
+            lines.forEach((line, index) => {
+                ctx.fillText(line, canvas.width / 2, canvas.height / 2 - 50 + (index * 40));
+            });
+        }
+
+        // Function to handle Level 3 advancement
+        function advanceToLevel3Handler(level2Score) {
+            const monkeyId = localStorage.getItem('monkeyId');
+            
+            // Mark player as permanently Level 3 - NEVER go back to Levels 1-2 (USER-SPECIFIC)
+            const playerLevel3Key = `playerLevel3Status_${monkeyId}`;
+            const qualificationKey = `level3QualificationTimestamp_${monkeyId}`;
+            localStorage.setItem(playerLevel3Key, 'true');
+            localStorage.setItem(qualificationKey, new Date().toISOString());
+            
+            // Store progression data for testbrowser.html
+            const progressionData = {
+                playerId: monkeyId,
+                fromLevel: 2,
+                level2Score: level2Score,
+                level2Completed: true,
+                advancedToLevel3: true,
+                timestamp: new Date().toISOString()
+            };
+            
+            // Store in localStorage for testbrowser.html to read
+            localStorage.setItem('gameProgression', JSON.stringify(progressionData));
+            localStorage.setItem('startLevel3', 'true');
+            
+            console.log('📦 Stored progression data:', progressionData);
+            console.log('🎯 PLAYER NOW PERMANENTLY LEVEL 3 - Will only play Level 3 from now on');
+            console.log('🚀 Redirecting to Level 3 (testbrowser.html)...');
+            
+            // Redirect to testbrowser.html with parameters
+            const params = new URLSearchParams({
+                from: 'browser_game',
+                playerId: monkeyId,
+                level2Score: level2Score,
+                startLevel: '3'
+            });
+            
+            window.location.href = `testbrowser.html?${params.toString()}`;
+        }
+
+        // Function to increment try number for same level
+        function incrementTryNumber() {
+            const playerId = localStorage.getItem('monkeyId');
+            if (!playerId) return;
+            
+            const tryNumberKey = getUserTryNumberKey(playerId);
+            const currentTryNumber = parseInt(localStorage.getItem(tryNumberKey)) || 1;
+            const newTryNumber = currentTryNumber + 1;
+            localStorage.setItem(tryNumberKey, newTryNumber.toString());
+            console.log(`🔄 Try number incremented to: ${newTryNumber} for Level ${currentLevel} (Player: ${playerId})`);
         }
 
         // Reset square animations
@@ -2266,39 +1585,25 @@
 
             const monkeyId = localStorage.getItem('monkeyId');
 
-            // Determine the try number for this level
-            const tryNumber = await getTryNumberForLevel(monkeyId, currentLevel);
-            localStorage.setItem('currentTryNumber', tryNumber.toString());
+            // Keep current try number (don't reset it here - it's managed by level progression logic)
 
-            // For level 3, explicitly store try history
-            if (currentLevel === 3) {
-                console.log(`Storing try number ${tryNumber} in level3 try history for ${monkeyId}`);
-
-                // Update try history in localStorage
-                let tryHistory = JSON.parse(localStorage.getItem(`level3_tryHistory_${monkeyId}`) || '[]');
-                if (!tryHistory.includes(tryNumber)) {
-                    tryHistory.push(tryNumber);
-                    localStorage.setItem(`level3_tryHistory_${monkeyId}`, JSON.stringify(tryHistory));
-                }
-            }
 
             // Reset level-specific data
             if (currentLevel === 2) {
                 level2Positions = null; // Force regeneration of positions
             }
 
-            // For Level 3, initialize a new click tracker for each new try
-            if (currentLevel === 3) {
-                // Reset click tracker for a new game session
-                window.level3ClickTracker = {};
-            }
 
             // Create fresh game state in localStorage
+            const currentTryNumber = parseInt(localStorage.getItem('currentTryNumber')) || 1;
+            console.log(`🎮 Resetting game: Level ${currentLevel}, Try ${currentTryNumber}`);
+            
             localStorage.setItem('currentGame', JSON.stringify({
                 level: currentLevel,
                 trials: [],
                 total: 0,
-                inProgress: true
+                inProgress: true,
+                tryNumber: currentTryNumber
             }));
 
             // Re-initialize sizes before creating squares
@@ -2306,43 +1611,9 @@
 
             // Create new squares for this level
             initializeSquares();
+            
+            console.log(`✅ Game reset complete: Level ${currentLevel}, Try ${currentTryNumber}`);
 
-            // For Level 3, reveal one random tile at the start
-            if (currentLevel === 3) {
-                // Pick a random square index
-                const randomIndex = Math.floor(Math.random() * squares.length);
-                const randomSquare = squares[randomIndex];
-
-                // Reveal the square
-                revealSquare(randomSquare);
-
-                // Store the revealed square's data as Trial 1
-                const points = randomSquare.points;
-
-                // Track this as the first trial with click number 0
-                clicks = 1; // Set clicks to 1 so the next user click will be trial 2
-                sunPosition = 0; // Keep sun at start position even after revealing first tile
-
-                // Calculate zscaled and other variables
-                const z = points / 5; // Normalize score to 0-1 range
-                const scale = 1.0;
-                const zscaled = z * scale;
-                const envOrder = currentEnvironment === "S" ? 1 : 0;
-                const reactionTime = 0; // No reaction time for auto-revealed tile
-
-                // Store the environment type in a global variable for this session
-                localStorage.setItem('currentEnvironmentType', currentEnvironment);
-                console.log(`Level 3 environment type: ${currentEnvironment} (envOrder: ${envOrder})`);
-
-                // Store the initial revealed tile in the database with all required fields
-                storeTrialData(points, randomSquare.tileX, randomSquare.tileY, 0).then(() => {
-                    // Save database state after initial reveal
-                    window.saveDatabase();
-                    console.log(`Level 3 initial reveal: Tile (${randomSquare.tileX}, ${randomSquare.tileY}) with value ${points}, z=${z}, zscaled=${zscaled}, envOrder=${envOrder}`);
-                }).catch(error => {
-                    console.error('Failed to store initial tile reveal data:', error);
-                });
-            }
         }
 
         // Initialize game with improved setup
@@ -2362,8 +1633,7 @@
             ctx.fillStyle = '#000';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Load monkey's progress before starting
-            await getMonkeyProgress();
+            // Note: monkey's progress was already loaded in startGame()
 
             // Initialize sizes first
             initializeSizes();
@@ -2401,16 +1671,6 @@
                 window.location.href = 'browser_admin.html';
             }
 
-            // Standard Level 3 export shortcut (Ctrl+Q or Cmd+Q)
-            if ((event.ctrlKey || event.metaKey) && (event.key === 'Q' || event.key === 'q')) {
-                window.location.href = 'browser_level3_export.html';
-            }
-
-            // Custom Level 3 export shortcut (Ctrl+W or Cmd+W)
-            if ((event.ctrlKey || event.metaKey) && (event.key === 'W' || event.key === 'w')) {
-                event.preventDefault(); // Prevent browser close window
-                window.location.href = 'browser_level3_custom_export.html';
-            }
 
             // Pellet configuration shortcut (Ctrl+Shift+P or Cmd+Shift+P)
             if ((event.ctrlKey || event.metaKey) && event.shiftKey && (event.key === 'P' || event.key === 'p')) {

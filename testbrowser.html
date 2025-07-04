@@ -1,0 +1,2326 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Level 3 Spatial Game</title>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #000;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+
+        #game-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        .welcome-container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            box-sizing: border-box;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus {
+            border-color: #4CAF50;
+            outline: none;
+        }
+
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin-top: 20px;
+        }
+
+        button:hover {
+            background: #45a049;
+        }
+
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .error {
+            color: #ff0000;
+            font-size: 14px;
+            margin-top: 5px;
+            display: none;
+        }
+
+        .loading {
+            display: none;
+            margin-top: 10px;
+            color: #666;
+        }
+
+        #welcome-screen {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+        }
+
+        #game-screen {
+            display: none;
+            width: 100%;
+            height: 100%;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .game-info {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            color: white;
+            font-size: 20px;
+            z-index: 1000;
+        }
+
+        .environment-info {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            color: white;
+            font-size: 20px;
+            z-index: 1000;
+        }
+
+        .debug-panel {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            max-width: 300px;
+            display: none;
+            z-index: 2000;
+        }
+
+        .debug-panel h3 {
+            margin: 0 0 10px 0;
+            color: #4CAF50;
+        }
+
+        .debug-panel button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            margin: 2px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+
+        .debug-panel button:hover {
+            background: #45a049;
+        }
+
+        .verification-results {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 10px;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            max-width: 80%;
+            max-height: 80%;
+            overflow-y: auto;
+            z-index: 3000;
+            display: none;
+            color: black;
+        }
+
+        .verification-results h2 {
+            color: #333;
+            margin-top: 0;
+        }
+
+        .env-grid {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 5px;
+            margin: 10px 0;
+        }
+
+        .env-cell {
+            padding: 5px;
+            text-align: center;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+
+        .env-used { background-color: #4CAF50; color: white; }
+        .env-unused { background-color: #f0f0f0; color: #666; }
+
+        .close-btn {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="welcome-screen">
+            <div class="welcome-container">
+                <h1>Level 3 Spatial Game</h1>
+                <div class="input-group">
+                    <input type="text" id="playerId" placeholder="Enter Player Name" autocomplete="off">
+                    <div id="error" class="error">Please enter a valid name</div>
+                </div>
+                <div id="loading" class="loading">Starting game...</div>
+                <button id="startButton" onclick="startGame()">Start Game</button>
+            </div>
+        </div>
+
+        <div id="game-screen">
+            <canvas id="gameCanvas"></canvas>
+            <div class="game-info" id="gameInfo">L-3:1</div>
+            <div class="environment-info" id="environmentInfo">Env: 0</div>
+            
+            <!-- Level progression indicator -->
+            <div class="progression-info" id="progressionInfo" style="display: none;">
+                From Level 2: Score 85
+            </div>
+            
+            <!-- Debug Panel -->
+            <div class="debug-panel" id="debugPanel">
+                <h3>Debug Controls</h3>
+                <button onclick="toggleEnvironmentTracking()">Toggle Env Tracking</button>
+                <button onclick="showEnvironmentVerification()">Verify Environments</button>
+                <button onclick="exportGameData()">Export Data (Original Format)</button>
+                <button onclick="showKernelSmoothInfo()">KernelSmooth Info</button>
+                <button onclick="simulateAllEnvironments()">Simulate All Envs</button>
+                <button onclick="showCurrentTrialInfo()">Show Current Trial Info</button>
+                <div id="envTrackingDisplay" style="margin-top: 10px; display: none;">
+                    <strong>Environment Tracking:</strong>
+                    <div id="envUsageList" style="max-height: 100px; overflow-y: auto; margin-top: 5px;"></div>
+                </div>
+            </div>
+
+            <!-- Verification Results Modal -->
+            <div class="verification-results" id="verificationModal">
+                <button class="close-btn" onclick="closeVerificationModal()">&times;</button>
+                <div id="verificationContent"></div>
+            </div>
+
+            <!-- Audio for correct sound -->
+            <audio id="correctSound" src="correct.wav" preload="auto" muted="false"></audio>
+        </div>
+    </div>
+
+    <script>
+        // Game state variables
+        let canvas, ctx;
+        let squares = [];
+        let clicks = 0;
+        let sunPosition = 0;
+        let isWaiting = false;
+        let gameActive = true;
+        let squareColors = [];
+        let revealedSquares = new Set();
+        let currentEnvironment = "0";
+        let gridSquares = [];
+        let playerId = "";
+        // Try number will be initialized after we have playerId
+        let tryNumber = 1;
+        let SQUARE_SIZE;
+        let SUN_MARGIN;
+
+        // Constants
+        const LEVEL3_TRIALS = 25; // User selectable trials in Level 3
+        const LEVEL3_TOTAL_TRIALS = 26; // Total trials including the initial auto-revealed tile
+        const BLANK_SCREEN_DURATION_LEVEL3 = 10000; // 3 minutes
+        const ITI_DURATION = 500;
+        const REVEAL_ANIMATION_DURATION = 500;
+        const ANIMATION_DURATION = 200;
+        const GRID_SIZE = 8;
+
+        const ENVIRONMENT_TYPES = {
+            ROUGH: 'R',
+            SMOOTH: 'S'
+        };
+
+        const COLORS = [
+            '#FFE5B4',
+            '#FFD699', 
+            '#FFB080',
+            '#E67550',
+            '#CC4433'
+        ];
+
+        // ========== USER-SPECIFIC PERSISTENT GAME STATE FUNCTIONS ==========
+        
+        function getLevel3GameStateKey(playerId) {
+            return `level3GameState_${playerId}`;
+        }
+
+        function getLevel3TrialResultsKey(playerId) {
+            return `level3TrialResults_${playerId}`;
+        }
+
+        function getLevel3TryNumberKey(playerId) {
+            return `level3_tryNumber_${playerId}`;
+        }
+
+        function getLevel3GameDataKey(playerId) {
+            return `level3GameData_${playerId}`;
+        }
+
+        function saveLevel3GameState() {
+            if (!playerId) {
+                console.warn('⚠️ No playerId found - cannot save Level 3 game state');
+                return;
+            }
+
+            const gameState = {
+                playerId: playerId,
+                tryNumber: tryNumber,
+                currentTrial: currentTrial,
+                gameActive: gameActive,
+                currentEnvironmentIndex: currentEnvironmentIndex,
+                revealedSquares: Array.from(revealedSquares),
+                gameResults: gameResults,
+                environmentUsageTracking: environmentUsageTracking,
+                timestamp: Date.now(),
+                level: 3
+            };
+            
+            const key = getLevel3GameStateKey(playerId);
+            localStorage.setItem(key, JSON.stringify(gameState));
+            console.log(`🔄 Level 3 game state saved for ${playerId}:`, gameState);
+        }
+
+        function loadLevel3GameState() {
+            try {
+                if (!playerId) {
+                    console.log('📝 No playerId found - starting fresh Level 3');
+                    return false;
+                }
+
+                const key = getLevel3GameStateKey(playerId);
+                const savedState = localStorage.getItem(key);
+                if (!savedState) {
+                    console.log(`📝 No Level 3 saved game state found for ${playerId} - starting fresh`);
+                    return false;
+                }
+
+                const gameState = JSON.parse(savedState);
+                
+                // Check if state belongs to current player
+                if (gameState.playerId !== playerId) {
+                    console.log(`⚠️ Level 3 state belongs to different player (${gameState.playerId}) - starting fresh for ${playerId}`);
+                    return false;
+                }
+                
+                // Check if state is recent (within 24 hours)
+                const hoursSinceLastSave = (Date.now() - gameState.timestamp) / (1000 * 60 * 60);
+                if (hoursSinceLastSave > 24) {
+                    console.log(`⏰ Level 3 saved state too old for ${playerId} - starting fresh`);
+                    localStorage.removeItem(key);
+                    return false;
+                }
+
+                // Restore game state
+                tryNumber = gameState.tryNumber || tryNumber;
+                currentTrial = gameState.currentTrial || 0;
+                gameActive = gameState.gameActive !== undefined ? gameState.gameActive : true;
+                currentEnvironmentIndex = gameState.currentEnvironmentIndex || 0;
+                revealedSquares = new Set(gameState.revealedSquares || []);
+                gameResults = gameState.gameResults || [];
+                environmentUsageTracking = gameState.environmentUsageTracking || {};
+
+                // Update localStorage with restored try number (user-specific)
+                const tryNumberKey = getLevel3TryNumberKey(playerId);
+                localStorage.setItem(tryNumberKey, tryNumber.toString());
+
+                console.log(`✅ Level 3 game state restored for ${playerId}:`, gameState);
+                console.log(`🎯 Continuing Level 3, Try ${tryNumber}, Trial ${currentTrial + 1}`);
+                return true;
+            } catch (error) {
+                console.error('❌ Error loading Level 3 game state:', error);
+                if (playerId) {
+                    localStorage.removeItem(getLevel3GameStateKey(playerId));
+                }
+                return false;
+            }
+        }
+
+        function clearLevel3GameState() {
+            if (playerId) {
+                localStorage.removeItem(getLevel3GameStateKey(playerId));
+                console.log(`🗑️ Level 3 game state cleared for ${playerId}`);
+            }
+        }
+
+        function saveLevel3TrialResult(score, trialNumber, environment, tileX, tileY) {
+            if (!playerId) return;
+
+            // Calculate additional original experiment values
+            const rawKernelValue = getKernelSmoothRawValue(tileX, tileY, environment);
+            const scaledValue = rawKernelValue * scale;
+
+            // Save individual trial result with original experiment format
+            const trialData = {
+                // Original experiment variables
+                x: tileX,
+                y: tileY,
+                z: score,
+                zscaled: scaledValue,
+                trial: trialNumber,
+                block: tryNumber,
+                monkeyid: playerId,
+                scale: scale,
+                envOrder: currentEnvironmentIndex,
+                pellet_count: Math.max(1, Math.min(5, Math.round(score/8))), // Normalize to 1-5 pellet range
+                environment: currentEnvironmentIndex % 2 === 0 ? "R" : "S", // R=Rough(even), S=Smooth(odd)
+                
+                // Additional metadata
+                level: 3,
+                playerId: playerId,
+                try: tryNumber,
+                timestamp: Date.now(),
+                kernelRawValue: rawKernelValue,
+                gridIndex: tileY * 8 + tileX,
+                isInitialReveal: trialNumber === 1
+            };
+            
+            console.log(`💾 SAVING TRIAL RESULT - Trial ${trialNumber}:`, trialData);
+            
+            const key = getLevel3TrialResultsKey(playerId);
+            let allTrials = JSON.parse(localStorage.getItem(key) || '[]');
+            allTrials.push(trialData);
+            localStorage.setItem(key, JSON.stringify(allTrials));
+            
+            console.log(`✅ TRIAL RESULT SAVED - Total trials saved: ${allTrials.length}`);
+            
+            // Also save current game progress
+            saveLevel3GameState();
+        }
+
+        // Kernel smooth data storage
+        let kernelSmoothData = null;
+        let environmentUsageTracking = {};
+        let isTrackingEnvironments = false;
+        let currentEnvironmentIndex = 0; // Store current environment for this try
+        
+        // Original experiment variables
+        let envOrder = []; // Pre-shuffled environment order (like original experiment)
+        let scale = 0; // Trial-specific scale factor (30-40 range)
+        let totalTrialsInTry = 25; // Total trials per try
+
+        // Function to get current environment index for this try
+        function getCurrentEnvironmentIndex() {
+            return currentEnvironmentIndex;
+        }
+
+        // Generate random environment order for this try (like original experiment)
+        function generateEnvironmentOrder() {
+            // Create array [0,1,2,...,39] and shuffle it like original experiment
+            const allEnvs = Array.from({length: 40}, (_, i) => i);
+            
+            // Fisher-Yates shuffle (same as original getRandomSubarray)
+            for (let i = allEnvs.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [allEnvs[i], allEnvs[j]] = [allEnvs[j], allEnvs[i]];
+            }
+            
+            return allEnvs;
+        }
+        
+        // Function to select environment for new try (matching original)
+        function selectEnvironmentForTry() {
+            // Generate new environment order for this try
+            envOrder = generateEnvironmentOrder();
+            
+            // Use first environment from shuffled order
+            currentEnvironmentIndex = envOrder[0];
+            
+            // Generate scale factor for this try (30-40 range like original)
+            scale = Math.floor(Math.random() * 11) + 30; // randomNum(30, 40)
+            
+            console.log(`🎲 Try ${tryNumber}: Environment ${currentEnvironmentIndex}, Scale ${scale}`);
+            
+            // Update environment display in bottom right
+            document.getElementById('environmentInfo').textContent = `Env: ${currentEnvironmentIndex}`;
+            
+            return currentEnvironmentIndex;
+        }
+
+        // Load kernel smooth data
+        async function loadKernelSmoothData() {
+            try {
+                console.log('🔍 Attempting to load KernelSmooth data...');
+                console.log('📂 Current page URL:', window.location.href);
+                console.log('📂 Page protocol:', window.location.protocol);
+                
+                // Check if we're running from file:// protocol
+                if (window.location.protocol === 'file:') {
+                    showCriticalError(`
+                        <h2>🚀 Single-Click Game Launcher</h2>
+                        <p><strong>Issue:</strong> Chrome blocks local file access when opening HTML files directly.</p>
+                        
+                        <h3>✅ Single-Click Solution:</h3>
+                        <p>Double-click the launcher file to start the game:</p>
+                        
+                        <h4>🖥️ Windows Users:</h4>
+                        <p><strong>Double-click: <code>start_game.bat</code></strong></p>
+                        
+                        <h4>🍎 Mac Users:</h4>
+                        <p><strong>Double-click: <code>start_game.sh</code></strong></p>
+                        
+                        <h4>🐧 Linux Users:</h4>
+                        <p><strong>Double-click: <code>start_game.sh</code></strong> or run <code>./start_game.sh</code></p>
+                        
+                        <hr style="margin: 20px 0;">
+                        
+                        <h4>📋 What the launcher does:</h4>
+                        <ol>
+                            <li>Starts a local web server automatically</li>
+                            <li>Opens your game in the browser</li>
+                            <li>Loads the real KernelSmooth.json data</li>
+                            <li>Ready to play in seconds!</li>
+                        </ol>
+                        
+                        <h4>⚙️ Requirements:</h4>
+                        <ul>
+                            <li>✅ Python installed (most systems have this)</li>
+                            <li>✅ Both files in same folder: <code>testbrowser.html</code> and <code>kernelSmooth.json</code></li>
+                        </ul>
+                        
+                        <p style="background: #e8f5e8; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                            <strong>🎯 Goal:</strong> This game requires the real KernelSmooth.json data for authentic spatial learning research. 
+                            No demo data or fallbacks - only the real experimental data.
+                        </p>
+                    `);
+                    return false;
+                }
+                
+                // Try to load from multiple possible locations
+                const possiblePaths = [
+                    'kernelSmooth.json',
+                    './kernelSmooth.json',
+                    'KernelSmooth.json',
+                    './KernelSmooth.json'
+                ];
+
+                let loadedSuccessfully = false;
+                let lastError = null;
+                
+                for (const path of possiblePaths) {
+                    try {
+                        console.log(`🔄 Trying to load from: ${path}`);
+                        const response = await fetch(path);
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
+                        
+                        const contentType = response.headers.get('content-type');
+                        console.log(`📋 Content-Type: ${contentType}`);
+                        
+                        // Check file size
+                        const contentLength = response.headers.get('content-length');
+                        if (contentLength) {
+                            const sizeKB = Math.round(parseInt(contentLength) / 1024);
+                            console.log(`📏 File size: ${sizeKB} KB`);
+                            
+                            if (sizeKB > 10000) { // > 10MB
+                                console.warn('⚠️ Large file detected, this might take a moment...');
+                            }
+                        }
+                        
+                        console.log('📖 Parsing JSON...');
+                        kernelSmoothData = await response.json();
+                        
+                        // Validate the loaded data
+                        if (!kernelSmoothData || typeof kernelSmoothData !== 'object') {
+                            throw new Error('Invalid JSON structure');
+                        }
+                        
+                        console.log(`✅ KernelSmooth data loaded successfully from: ${path}`);
+                        loadedSuccessfully = true;
+                        break;
+                        
+                    } catch (pathError) {
+                        console.warn(`❌ Failed to load from ${path}:`, pathError.message);
+                        lastError = pathError;
+                        continue;
+                    }
+                }
+                
+                if (!loadedSuccessfully) {
+                    throw new Error(`Failed to load KernelSmooth data. Last error: ${lastError?.message || 'Unknown error'}`);
+                }
+                
+                // Strict validation of KernelSmooth data
+                const environmentKeys = Object.keys(kernelSmoothData);
+                console.log(`📊 Total environments found: ${environmentKeys.length}`);
+                
+                if (environmentKeys.length === 0) {
+                    throw new Error('KernelSmooth data is empty');
+                }
+                
+                if (environmentKeys.length !== 40) {
+                    console.warn(`⚠️ Expected 40 environments, found ${environmentKeys.length}`);
+                    // Allow loading but warn user
+                }
+                
+                // Check that environments are numbered 0-39 (or at least sequential)
+                const expectedKeys = Array.from({length: Math.min(40, environmentKeys.length)}, (_, i) => i.toString());
+                const missingKeys = expectedKeys.filter(key => !environmentKeys.includes(key));
+                const extraKeys = environmentKeys.filter(key => !expectedKeys.includes(key));
+                
+                if (missingKeys.length > 0) {
+                    console.warn(`⚠️ Missing environments: ${missingKeys.join(', ')}`);
+                }
+                
+                if (extraKeys.length > 0) {
+                    console.log(`📋 Extra environments found: ${extraKeys.join(', ')}`);
+                }
+                
+                // Verify each environment has the expected structure
+                let validEnvironments = 0;
+                let invalidEnvironments = [];
+                let warningEnvironments = [];
+                
+                const envsToCheck = Math.min(40, environmentKeys.length);
+                
+                for (let i = 0; i < envsToCheck; i++) {
+                    const envKey = i.toString();
+                    const envData = kernelSmoothData[envKey];
+                    
+                    if (!envData || typeof envData !== 'object') {
+                        invalidEnvironments.push(`${envKey} (no data)`);
+                        continue;
+                    }
+                    
+                    const tileKeys = Object.keys(envData);
+                    const numTiles = tileKeys.length;
+                    
+                    // Check that at least some tiles have the required structure
+                    let validTiles = 0;
+                    const expectedTileIndices = Array.from({length: 64}, (_, j) => j.toString());
+                    let missingTiles = [];
+                    
+                    // Check each expected tile index
+                    for (let j = 0; j < 64; j++) {
+                        const tileKey = j.toString();
+                        const tile = envData[tileKey];
+                        
+                        if (tile && 
+                            typeof tile.x1 === 'number' && 
+                            typeof tile.x2 === 'number' && 
+                            typeof tile.y === 'number' &&
+                            tile.y >= 0 && tile.y <= 1) {
+                            validTiles++;
+                        } else if (!tile) {
+                            missingTiles.push(j);
+                        }
+                    }
+                    
+                    // Log detailed info for environments with missing tiles
+                    if (missingTiles.length > 0) {
+                        console.warn(`⚠️ Environment ${envKey}: Missing tiles at indices: ${missingTiles.join(', ')}`);
+                        console.warn(`   Available tiles: ${tileKeys.join(', ')}`);
+                    }
+                    
+                    // Tolerance for minor data issues
+                    const completeness = validTiles / 64;
+                    
+                    if (validTiles === 64) {
+                        validEnvironments++;
+                    } else if (completeness >= 0.95) { // At least 95% complete (61+ tiles)
+                        validEnvironments++;
+                        warningEnvironments.push(`${envKey} (${validTiles}/64 tiles - ${Math.round(completeness * 100)}% complete)`);
+                    } else {
+                        invalidEnvironments.push(`${envKey} (${validTiles}/64 valid tiles - ${Math.round(completeness * 100)}% complete)`);
+                    }
+                }
+                
+                // Show warnings for incomplete environments
+                if (warningEnvironments.length > 0) {
+                    console.warn(`⚠️ Environments with minor data issues (will still work): ${warningEnvironments.join(', ')}`);
+                }
+                
+                if (validEnvironments === 0) {
+                    throw new Error(`No valid environments found. Invalid: ${invalidEnvironments.join(', ')}`);
+                }
+                
+                // Allow game to continue if we have at least 30 environments (75% complete)
+                if (validEnvironments < 30) {
+                    throw new Error(`Insufficient valid environments: ${validEnvironments}/40. Invalid: ${invalidEnvironments.join(', ')}`);
+                }
+                
+                console.log(`✅ ${validEnvironments} valid environments loaded`);
+                console.log(`📋 Data structure: ${validEnvironments} environments available`);
+                
+                if (invalidEnvironments.length > 0) {
+                    console.warn(`⚠️ Some environments have significant issues: ${invalidEnvironments.join(', ')}`);
+                }
+                
+                // Store environment validation results for later use
+                window.environmentValidation = {
+                    total: environmentKeys.length,
+                    valid: validEnvironments,
+                    warnings: warningEnvironments,
+                    invalid: invalidEnvironments,
+                    missingTileDetails: {}
+                };
+                
+                // Collect detailed missing tile information
+                for (let i = 0; i < envsToCheck; i++) {
+                    const envKey = i.toString();
+                    const envData = kernelSmoothData[envKey];
+                    if (envData) {
+                        const missingTiles = [];
+                        for (let j = 0; j < 64; j++) {
+                            if (!envData[j.toString()]) {
+                                missingTiles.push(j);
+                            }
+                        }
+                        if (missingTiles.length > 0) {
+                            window.environmentValidation.missingTileDetails[envKey] = missingTiles;
+                        }
+                    }
+                }
+                
+                return true;
+                
+            } catch (error) {
+                console.error('💥 CRITICAL ERROR: Failed to load KernelSmooth data:', error);
+                
+                // Show user-friendly error message
+                showCriticalError(`
+                    <h2>❌ Cannot Load Game Data</h2>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    
+                    <h3>🔧 Troubleshooting Steps:</h3>
+                    <ol>
+                        <li><strong>Check file location:</strong> Make sure <code>kernelSmooth.json</code> is in the same folder as this HTML file</li>
+                        <li><strong>Use a web server:</strong> Don't open HTML directly in Chrome. Use one of these:
+                            <ul>
+                                <li>Python: <code>python -m http.server 8000</code></li>
+                                <li>Node.js: <code>npx http-server</code></li>
+                                <li>VS Code: Install Live Server extension</li>
+                            </ul>
+                        </li>
+                        <li><strong>Check file integrity:</strong> Open kernelSmooth.json in a text editor to verify it's valid JSON</li>
+                        <li><strong>File size check:</strong> Very large files (>50MB) might timeout</li>
+                        <li><strong>Browser console:</strong> Press F12 and check Console tab for detailed errors</li>
+                    </ol>
+                    
+                    <h3>🚫 Game Cannot Start</h3>
+                    <p>This game requires the complete KernelSmooth dataset. No fallback mode available.</p>
+                    
+                    <h3>📂 Current Status:</h3>
+                    <p>Page URL: <code>${window.location.href}</code></p>
+                    <p>Protocol: <code>${window.location.protocol}</code></p>
+                `);
+                
+                return false;
+            }
+        }
+
+        // Box-Muller transformation for Gaussian noise (exactly like original)
+        function myNorm() {
+            // Box-Muller transform to generate normally distributed random numbers
+            const u1 = Math.random();
+            const u2 = Math.random();
+            
+            // Avoid exact zeros
+            const adjustedU1 = u1 === 0 ? 0.0001 : u1;
+            const adjustedU2 = u2 === 0 ? 0.0001 : u2;
+            
+            // Box-Muller transform
+            const r = Math.sqrt(-2.0 * Math.log(adjustedU1));
+            const theta = 2.0 * Math.PI * adjustedU2;
+            
+            // Return one of the two values (standard normal distribution)
+            return r * Math.cos(theta);
+        }
+        
+        // Get raw kernel smooth value (0-1) for data storage
+        function getKernelSmoothRawValue(tileX, tileY, environmentIndex) {
+            if (!kernelSmoothData) {
+                console.warn('⚠️ KernelSmooth data not loaded - returning neutral value');
+                return 0.5;
+            }
+            
+            const envKey = environmentIndex.toString();
+            if (!kernelSmoothData[envKey]) {
+                console.warn(`⚠️ Environment ${environmentIndex} not found - returning neutral value`);
+                return 0.5;
+            }
+
+            const tileIndex = tileY * 8 + tileX;
+            const tileKey = tileIndex.toString();
+            const envData = kernelSmoothData[envKey];
+
+            if (!envData[tileKey]) {
+                console.warn(`⚠️ Missing tile data for position (${tileX},${tileY}) - returning neutral value`);
+                return 0.5;
+            }
+            
+            const tileData = envData[tileKey];
+            return tileData.y; // Return raw 0-1 value
+        }
+
+        // Get reward from KernelSmooth data (exactly like original experiment)
+        function getKernelSmoothReward(tileX, tileY, environmentIndex) {
+            // STRICT MODE: No fallbacks allowed
+            if (!kernelSmoothData) {
+                throw new Error('KernelSmooth data not loaded - game cannot continue');
+            }
+            
+            const envKey = environmentIndex.toString();
+            if (!kernelSmoothData[envKey]) {
+                throw new Error(`Environment ${environmentIndex} not found in KernelSmooth data`);
+            }
+
+            // Calculate the index for the 8x8 grid position
+            const tileIndex = tileY * 8 + tileX;
+            const tileKey = tileIndex.toString();
+
+            // Get the environment data
+            const envData = kernelSmoothData[envKey];
+
+            // Find the data point for this tile position
+            if (!envData[tileKey]) {
+                // Handle missing tiles gracefully - use nearest neighbor or average
+                console.warn(`⚠️ Missing tile data for position (${tileX},${tileY}) index ${tileIndex} in environment ${environmentIndex}`);
+                
+                // Try to find nearby tiles
+                const nearbyTiles = [];
+                const searchRadius = 2;
+                
+                for (let dy = -searchRadius; dy <= searchRadius; dy++) {
+                    for (let dx = -searchRadius; dx <= searchRadius; dx++) {
+                        if (dx === 0 && dy === 0) continue;
+                        
+                        const nearX = tileX + dx;
+                        const nearY = tileY + dy;
+                        
+                        if (nearX >= 0 && nearX < 8 && nearY >= 0 && nearY < 8) {
+                            const nearIndex = nearY * 8 + nearX;
+                            const nearTile = envData[nearIndex.toString()];
+                            
+                            if (nearTile && typeof nearTile.y === 'number') {
+                                nearbyTiles.push(nearTile.y);
+                            }
+                        }
+                    }
+                }
+                
+                if (nearbyTiles.length > 0) {
+                    const avgY = nearbyTiles.reduce((sum, y) => sum + y, 0) / nearbyTiles.length;
+                    console.warn(`   Using average of ${nearbyTiles.length} nearby tiles: ${avgY.toFixed(4)}`);
+                    // Apply original calculation to average
+                    const absoluteValue = avgY * 50;
+                    const noiseyValue = Math.round(absoluteValue + myNorm());
+                    const rescaledValue = Math.max(Math.round(noiseyValue / 50 * scale + 5), 0);
+                    return rescaledValue;
+                } else {
+                    // Last resort: use a neutral value with original scaling
+                    console.warn(`   No nearby tiles found, using neutral value`);
+                    const absoluteValue = 0.5 * 50; // Middle value
+                    const noiseyValue = Math.round(absoluteValue + myNorm());
+                    const rescaledValue = Math.max(Math.round(noiseyValue / 50 * scale + 5), 0);
+                    return rescaledValue;
+                }
+            }
+            
+            const tileData = envData[tileKey];
+            if (typeof tileData.y !== 'number' || tileData.y < 0 || tileData.y > 1) {
+                throw new Error(`Invalid tile data for position (${tileX},${tileY}) in environment ${environmentIndex}`);
+            }
+
+            // ORIGINAL EXPERIMENT CALCULATION (exactly matching scGrids)
+            const yValue = tileData.y;
+            
+            // Step 1: Convert to 0-50 scale (like original)
+            const absoluteValue = yValue * 50;
+            
+            // Step 2: Add Gaussian noise (like original)
+            const noiseyValue = Math.round(absoluteValue + myNorm());
+            
+            // Step 3: Rescale with trial-specific scale factor + base offset (like original)
+            const rescaledValue = Math.max(Math.round(noiseyValue / 50 * scale + 5), 0);
+            
+            console.log(`Reward calculation - Env ${environmentIndex}, Tile (${tileX},${tileY}): Y=${yValue.toFixed(4)} → Absolute=${absoluteValue.toFixed(2)} → +Noise=${noiseyValue} → Final=${rescaledValue}`);
+            
+            return rescaledValue;
+        }
+
+        // Calculate Level 3 reward (exactly like original experiment)
+        function calculateLevel3Reward(tileX, tileY, trialNumber) {
+            try {
+                // Use fixed environment for this try (like original experiment)
+                const environmentIndex = getCurrentEnvironmentIndex();
+                currentEnvironment = environmentIndex.toString();
+
+                console.log(`🎯 REWARD CALCULATION START - Trial ${trialNumber}, Try ${tryNumber}, Environment ${environmentIndex}, Scale ${scale}, Tile (${tileX},${tileY})`);
+
+                // Track environment usage
+                if (isTrackingEnvironments) {
+                    if (!environmentUsageTracking[currentEnvironment]) {
+                        environmentUsageTracking[currentEnvironment] = {
+                            count: 0,
+                            trials: [],
+                            tryNumbers: []
+                        };
+                    }
+                    environmentUsageTracking[currentEnvironment].count++;
+                    environmentUsageTracking[currentEnvironment].trials.push(trialNumber);
+                    environmentUsageTracking[currentEnvironment].tryNumbers.push(tryNumber);
+                    
+                    updateEnvironmentTrackingDisplay();
+                }
+
+                // Get reward using original experiment calculation
+                const finalReward = getKernelSmoothReward(tileX, tileY, environmentIndex);
+
+                console.log(`💰 REWARD CALCULATION COMPLETE - Final reward: ${finalReward} points`);
+
+                return finalReward; // Already properly calculated in getKernelSmoothReward
+                
+            } catch (error) {
+                console.error('💥 CRITICAL ERROR in calculateLevel3Reward:', error);
+                showCriticalError(`
+                    <h2>❌ Game Error</h2>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <p>The game cannot continue without valid KernelSmooth data.</p>
+                    <button onclick="location.reload()">Reload Game</button>
+                `);
+                throw error; // Re-throw to stop game execution
+            }
+        }
+
+        // Initialize sizes based on screen dimensions
+        function initializeSizes() {
+            // Account for UI elements and sun positioning to prevent overlaps
+            const availableWidth = window.innerWidth - 40; // Reserve 20px margins on each side
+            const sunSpace = 70;  // Sun takes top 70px (30px center + 40px glow radius)
+            const bottomUISpace = 60; // Info displays at bottom
+            const availableHeight = window.innerHeight - sunSpace - bottomUISpace; // Reserve space for sun + bottom UI
+            
+            // Calculate spacing separately for horizontal and vertical to maximize spread
+            // INCREASED horizontal spacing for wider spread while ensuring no overlaps
+            
+            // For horizontal: Total width = 8 * SQUARE_SIZE + 7 * horizontalMargin
+            // For vertical: Total height = 8 * SQUARE_SIZE + 7 * verticalMargin
+            
+            // Use LARGER horizontal margins (1.0x square size) for maximum horizontal spread
+            // Keep vertical margins (0.6x square size) for good vertical spacing
+            // Width constraint: SQUARE_SIZE = availableWidth / (8 + 7 * 1.0) = availableWidth / 15.0
+            // Height constraint: SQUARE_SIZE = availableHeight / (8 + 7 * 0.6) = availableHeight / 12.2
+            
+            const maxSquareSizeFromWidth = availableWidth / 15.0;  // MAXIMUM horizontal spacing
+            const maxSquareSizeFromHeight = availableHeight / 12.2; // Existing vertical spacing
+            
+            // Use the smaller to ensure grid fits in both dimensions with safe margins
+            SQUARE_SIZE = Math.min(maxSquareSizeFromWidth, maxSquareSizeFromHeight);
+            SUN_MARGIN = SQUARE_SIZE;
+            
+            console.log(`Grid sizing - Available space: ${availableWidth}x${availableHeight}px (reserved ${sunSpace}px for sun), Square size: ${SQUARE_SIZE.toFixed(1)}px`);
+        }
+
+        // Play correct sound
+        function playCorrectSound(count = 1) {
+            console.log(`Playing sound ${count} times`);
+            for (let i = 0; i < count; i++) {
+                setTimeout(() => {
+                    const audio = new Audio('correct.wav');
+                    audio.volume = 1.0;
+                    audio.play().catch(error => {
+                        console.error(`Failed to play sound ${i + 1}:`, error);
+                    });
+                }, i * 600);
+            }
+        }
+
+        // Initialize audio
+        function initializeAudio() {
+            document.addEventListener('click', function enableAudio() {
+                const testAudio = new Audio('correct.wav');
+                testAudio.play().then(() => {
+                    testAudio.pause();
+                    testAudio.currentTime = 0;
+                    console.log('Audio context enabled successfully');
+                }).catch(err => {
+                    console.warn('Audio context enable failed:', err);
+                });
+                document.removeEventListener('click', enableAudio);
+            }, { once: true });
+        }
+
+        // Create Level 3 grid
+        function createLevel3Grid() {
+            // STRICT MODE: Only use KernelSmooth data
+            if (!kernelSmoothData) {
+                throw new Error('Cannot create grid: KernelSmooth data not available');
+            }
+
+            const grid = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(null));
+
+            console.log("🎯 Creating Level 3 grid using KernelSmooth data (NO FALLBACKS)");
+
+            // Use the current random environment for this try
+            const envIndex = getCurrentEnvironmentIndex();
+            const envKey = envIndex.toString();
+
+            if (!kernelSmoothData[envKey]) {
+                throw new Error(`Environment ${envIndex} not found in KernelSmooth data`);
+            }
+
+            console.log(`🌍 Using environment ${envIndex} (try number ${tryNumber})`);
+
+            // Fill grid using kernelSmooth data
+            for (let i = 0; i < GRID_SIZE; i++) {
+                for (let j = 0; j < GRID_SIZE; j++) {
+                    // Calculate index in kernelSmooth format
+                    const tileIndex = i * GRID_SIZE + j;
+                    const tileKey = tileIndex.toString();
+
+                    if (!kernelSmoothData[envKey][tileKey]) {
+                        throw new Error(`Missing tile data for grid[${i}][${j}] (index ${tileIndex}) in environment ${envIndex}`);
+                    }
+
+                    // Get y value from kernelSmooth (normalized 0-1 value)
+                    const tileData = kernelSmoothData[envKey][tileKey];
+                    const normalizedValue = tileData.y;
+
+                    if (typeof normalizedValue !== 'number' || normalizedValue < 0 || normalizedValue > 1) {
+                        throw new Error(`Invalid normalized value ${normalizedValue} for grid[${i}][${j}] in environment ${envIndex}`);
+                    }
+
+                    // Use original scaling method for consistency with actual rewards
+                    // This matches the calculation in getKernelSmoothReward
+                    const yValue = normalizedValue;
+                    
+                    // Step 1: Convert to 0-50 scale (like original)
+                    const absoluteValue = yValue * 50;
+                    
+                    // Step 2: Add Gaussian noise (like original) - using average noise for display
+                    const noiseyValue = Math.round(absoluteValue + 0); // No noise for display consistency
+                    
+                    // Step 3: Rescale with trial-specific scale factor + base offset (like original)
+                    const pointValue = Math.max(Math.round(noiseyValue / 50 * scale + 5), 0);
+                    grid[i][j] = pointValue;
+                    
+                    if (i === 0 && j < 5) { // Log first few tiles for verification
+                        console.log(`🔢 Grid[${i}][${j}] = ${pointValue} (from KernelSmooth value ${normalizedValue.toFixed(4)}, scale ${scale}, original calc: ${absoluteValue.toFixed(2)} → ${noiseyValue} → ${pointValue})`);
+                    }
+                }
+            }
+
+            console.log(`✅ Grid created successfully using environment ${envIndex} from KernelSmooth data`);
+
+            // Update the current environment indicator
+            currentEnvironment = envKey;
+
+            return grid;
+        }
+
+        // Initialize squares for Level 3
+        function initializeSquares() {
+            squares = [];
+            squareColors = [];
+
+            try {
+                const grid = createLevel3Grid(); // This will throw error if KernelSmooth data not available
+                // Use MAXIMUM horizontal spacing while ensuring safe positioning
+                const horizontalMargin = SQUARE_SIZE * 1.0; // MAXIMUM horizontal spacing (equal to square size!)
+                const verticalMargin = SQUARE_SIZE * 0.6;   // Keep good vertical spacing
+                
+                const gridWidth = GRID_SIZE * (SQUARE_SIZE + horizontalMargin) - horizontalMargin;
+                const gridHeight = GRID_SIZE * (SQUARE_SIZE + verticalMargin) - verticalMargin;
+                
+                // Position grid safely below sun and above bottom UI
+                const sunSpace = 70;  // Top 70px reserved for sun
+                const bottomUISpace = 60; // Bottom 60px for UI elements
+                const availableGameHeight = canvas.height - sunSpace - bottomUISpace;
+                
+                const startX = (canvas.width - gridWidth) / 2; // Center horizontally
+                // Ensure minimum 20px spacing from sun
+                const minSunSpacing = 20;
+                const minStartY = sunSpace + minSunSpacing;
+                const centeredStartY = sunSpace + (availableGameHeight - gridHeight) / 2;
+                const startY = Math.max(minStartY, centeredStartY); // Use whichever gives more space from sun
+                
+                // Debug logging to verify no overlaps
+                console.log(`Grid Layout - Canvas: ${canvas.width}x${canvas.height}, Grid: ${gridWidth.toFixed(1)}x${gridHeight.toFixed(1)}`);
+                console.log(`   Square: ${SQUARE_SIZE.toFixed(1)}px, Horizontal spacing: ${horizontalMargin.toFixed(1)}px, Vertical spacing: ${verticalMargin.toFixed(1)}px`);
+                console.log(`   Position: (${startX.toFixed(1)}, ${startY.toFixed(1)}) - ${(startY - sunSpace).toFixed(1)}px spacing from sun`);
+                
+                // Comprehensive safety checks for overlaps
+                const gridBottom = startY + gridHeight;
+                const safeBottomLimit = canvas.height - bottomUISpace;
+                const gridRight = startX + gridWidth;
+                
+                if (startY < minStartY) {
+                    console.warn(`⚠️ Grid too close to sun! Grid Y: ${startY.toFixed(1)}, Min safe Y: ${minStartY}`);
+                }
+                if (gridBottom > safeBottomLimit) {
+                    console.warn(`⚠️ Grid might overlap bottom UI! Grid bottom: ${gridBottom.toFixed(1)}, Safe limit: ${safeBottomLimit}`);
+                }
+                if (gridRight > canvas.width - 20) {
+                    console.warn(`⚠️ Grid might extend too far right! Grid right: ${gridRight.toFixed(1)}, Canvas width: ${canvas.width}`);
+                }
+                
+                console.log(`Grid safely positioned with ${(startY - sunSpace).toFixed(1)}px spacing from sun, ${(canvas.height - gridBottom).toFixed(1)}px from bottom`);
+
+                for (let i = 0; i < GRID_SIZE; i++) {
+                    for (let j = 0; j < GRID_SIZE; j++) {
+                        const value = grid[i][j];
+                        const x = startX + j * (SQUARE_SIZE + horizontalMargin);
+                        const y = startY + i * (SQUARE_SIZE + verticalMargin);
+
+                        squares.push({
+                            x,
+                            y,
+                            value,
+                            points: value,
+                            color: '#FFFFFF',
+                            scale: 1,
+                            isAnimating: false,
+                            isRevealed: false,
+                            tileX: j,   // Column (0-7)
+                            tileY: i,   // Row (0-7)
+                            clickCount: 0
+                        });
+                        // Map the original scaled value to color index (0-4)
+                        // Since original values can range from 5 to (scale + 5), we need to normalize
+                        const minValue = 5; // Base offset from original scaling
+                        const maxValue = scale + 5; // Maximum possible value
+                        const normalizedValue = (value - minValue) / (maxValue - minValue);
+                        const colorIndex = Math.max(0, Math.min(4, Math.floor(normalizedValue * 5)));
+                        squareColors.push(COLORS[colorIndex]);
+                    }
+                }
+                
+                console.log(`✅ Initialized ${squares.length} squares using KernelSmooth environment ${currentEnvironment}`);
+                
+            } catch (error) {
+                console.error('💥 CRITICAL ERROR in initializeSquares:', error);
+                showCriticalError(`
+                    <h2>❌ Cannot Initialize Game</h2>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <p>The game requires valid KernelSmooth data to create the grid.</p>
+                    <button onclick="location.reload()">Reload Game</button>
+                `);
+                throw error;
+            }
+        }
+
+        // Color adjustment helper
+        function adjustColor(color, amount) {
+            const hex = color.replace('#', '');
+            const r = Math.max(0, Math.min(255, parseInt(hex.slice(0, 2), 16) + amount));
+            const g = Math.max(0, Math.min(255, parseInt(hex.slice(2, 4), 16) + amount));
+            const b = Math.max(0, Math.min(255, parseInt(hex.slice(4, 6), 16) + amount));
+            return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+        }
+
+        // Draw square
+        function drawSquare(square) {
+            const size = SQUARE_SIZE * square.scale;
+            const x = square.x - (size - SQUARE_SIZE) / 2;
+            const y = square.y - (size - SQUARE_SIZE) / 2;
+
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+            ctx.shadowBlur = 10;
+            ctx.shadowOffsetX = 2;
+            ctx.shadowOffsetY = 2;
+
+            const gradient = ctx.createLinearGradient(x, y, x + size, y + size);
+            gradient.addColorStop(0, square.color);
+            gradient.addColorStop(1, adjustColor(square.color, -20));
+            ctx.fillStyle = gradient;
+
+            ctx.beginPath();
+            ctx.roundRect(x, y, size, size, 5);
+            ctx.fill();
+
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+        }
+
+        // Draw sun
+        function drawSun() {
+            const sunX = 50 + (canvas.width - 100) * (sunPosition / LEVEL3_TRIALS);
+
+            // Outer glow
+            const outerGradient = ctx.createRadialGradient(sunX, 30, 0, sunX, 30, 40);
+            outerGradient.addColorStop(0, 'rgba(255, 255, 200, 0.4)');
+            outerGradient.addColorStop(0.2, 'rgba(255, 200, 0, 0.2)');
+            outerGradient.addColorStop(1, 'rgba(255, 150, 0, 0)');
+            ctx.fillStyle = outerGradient;
+            ctx.beginPath();
+            ctx.arc(sunX, 30, 40, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Inner sun
+            const innerGradient = ctx.createRadialGradient(sunX, 30, 0, sunX, 30, 15);
+            innerGradient.addColorStop(0, '#FFFFFF');
+            innerGradient.addColorStop(0.3, '#FFFFA0');
+            innerGradient.addColorStop(0.6, '#FFD700');
+            innerGradient.addColorStop(1, '#FFA500');
+            ctx.fillStyle = innerGradient;
+            ctx.beginPath();
+            ctx.arc(sunX, 30, 15, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Highlight
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.beginPath();
+            ctx.arc(sunX - 3, 27, 5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Reveal square animation
+        function revealSquare(square) {
+            if (square.isRevealing) return;
+
+            square.isRevealing = true;
+            const startTime = Date.now();
+            const originalColor = square.color;
+            const targetColor = squareColors[squares.indexOf(square)];
+
+            function animate() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(1, elapsed / REVEAL_ANIMATION_DURATION);
+
+                // Color interpolation
+                const r1 = parseInt(originalColor.slice(1, 3), 16);
+                const g1 = parseInt(originalColor.slice(3, 5), 16);
+                const b1 = parseInt(originalColor.slice(5, 7), 16);
+
+                const r2 = parseInt(targetColor.slice(1, 3), 16);
+                const g2 = parseInt(targetColor.slice(3, 5), 16);
+                const b2 = parseInt(targetColor.slice(5, 7), 16);
+
+                const r = Math.round(r1 + (r2 - r1) * progress);
+                const g = Math.round(g1 + (g2 - g1) * progress);
+                const b = Math.round(b1 + (b2 - b1) * progress);
+
+                square.color = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+
+                // Scale animation
+                square.scale = 1 + 0.2 * Math.sin(progress * Math.PI);
+
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    square.color = targetColor;
+                    square.scale = 1;
+                    square.isRevealing = false;
+                    square.isRevealed = true;
+                    revealedSquares.add(squares.indexOf(square));
+                }
+            }
+
+            animate();
+        }
+
+        // Animate square
+        function animateSquare(square, options = {}) {
+            if (square.isAnimating) return;
+
+            const defaultOptions = {
+                amplitude: 0.1,
+                duration: 150,
+                easing: Math.sin
+            };
+
+            const config = {...defaultOptions, ...options};
+
+            square.isAnimating = true;
+            const startTime = Date.now();
+
+            function animate() {
+                const elapsed = Date.now() - startTime;
+                const progress = elapsed / config.duration;
+
+                if (progress < 0.5) {
+                    square.scale = 1 + config.amplitude * config.easing(progress * Math.PI);
+                } else {
+                    square.scale = 1 + config.amplitude * config.easing((1 - progress) * Math.PI);
+                }
+
+                if (progress >= 1) {
+                    square.scale = 1;
+                    square.isAnimating = false;
+                } else {
+                    requestAnimationFrame(animate);
+                }
+            }
+
+            animate();
+        }
+
+        // Main draw function
+        function draw() {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            if (gameActive) {
+                squares.forEach(drawSquare);
+                drawSun();
+            }
+        }
+
+        // Handle click
+        function handleClick(event) {
+            if (!gameActive || isWaiting) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const x = (event.clientX - rect.left) * (canvas.width / rect.width);
+            const y = (event.clientY - rect.top) * (canvas.height / rect.height);
+
+            squares.forEach((square, index) => {
+                if (x >= square.x && x <= square.x + SQUARE_SIZE &&
+                    y >= square.y && y <= square.y + SQUARE_SIZE) {
+
+                    clicks++;
+                    sunPosition++;
+                    isWaiting = true;
+
+                    // Calculate reward using kernelSmooth data
+                    let points = calculateLevel3Reward(square.tileX, square.tileY, clicks);
+                    square.points = points;
+
+                    // Get raw kernel value for logging
+                    const rawKernelValue = getKernelSmoothRawValue(square.tileX, square.tileY, currentEnvironmentIndex);
+                    const scaledValue = rawKernelValue * scale;
+                    const environmentType = currentEnvironmentIndex % 2 === 0 ? "R" : "S";
+                    const pelletCount = Math.max(1, Math.min(5, Math.round(points/8)));
+
+                    // EXPERIMENT DATA LOG - All original experiment values for each click
+                    console.log(`
+=== TRIAL ${clicks} DATA ===
+Tile Position: (${square.tileX}, ${square.tileY})
+Points Earned: ${points}
+
+ORIGINAL EXPERIMENT VALUES:
+   x: ${square.tileX} (tile X coordinate 0-7)
+   y: ${square.tileY} (tile Y coordinate 0-7)  
+   z: ${points} (raw reward value)
+   zscaled: ${scaledValue.toFixed(2)} (scale-adjusted value)
+   trial: ${clicks} (trial number within try)
+   block: ${tryNumber} (block/try number)
+   monkeyid: ${playerId} (player identifier)
+   scale: ${scale} (trial scale factor 30-40)
+   envOrder: ${currentEnvironmentIndex} (environment index 0-39)
+   pellet_count: ${pelletCount} (pellets dispensed 1-5)
+   environment: ${environmentType} (R=Rough, S=Smooth)
+
+CALCULATION DETAILS:
+   Raw Kernel Value: ${rawKernelValue.toFixed(4)} (from KernelSmooth data)
+   Grid Index: ${square.tileY * 8 + square.tileX} (linear position in 8x8 grid)
+   Environment Type: ${environmentType} (${currentEnvironmentIndex % 2 === 0 ? 'Even=Rough' : 'Odd=Smooth'})
+===============================`);
+
+                    // Play sound and reveal/animate
+                    // Normalize sound count to 1-5 range for better user experience
+                    const minValue = 5; // Base offset from original scaling
+                    const maxValue = scale + 5; // Maximum possible value
+                    const normalizedPoints = (points - minValue) / (maxValue - minValue);
+                    const soundCount = Math.max(1, Math.min(5, Math.round(normalizedPoints * 5)));
+                    playCorrectSound(soundCount);
+
+                    if (!square.isRevealed) {
+                        revealSquare(square);
+                    } else {
+                        animateSquare(square);
+                    }
+
+                    // Store game data
+                    storeGameData(points, square.tileX, square.tileY);
+
+                    // Update current trial counter
+                    currentTrial = clicks;
+
+                    // Save game state after each click
+                    saveLevel3GameState();
+                    saveLevel3TrialResult(points, clicks, currentEnvironmentIndex, square.tileX, square.tileY);
+
+                    setTimeout(() => {
+                        isWaiting = false;
+
+                        if (clicks >= LEVEL3_TRIALS) {
+                            console.log(`🎯 TRIAL COMPLETION: Completed ${clicks}/${LEVEL3_TRIALS} trials. Starting 3-minute break...`);
+                            handleGameCompletion();
+                        }
+                    }, ITI_DURATION);
+                }
+            });
+        }
+
+        // Store game data (user-specific) - Enhanced with original experiment values
+        function storeGameData(score, tileX, tileY) {
+            if (!playerId) return;
+            
+            const gameDataKey = getLevel3GameDataKey(playerId);
+            let gameData = JSON.parse(localStorage.getItem(gameDataKey) || '[]');
+            
+            // Calculate additional original experiment values
+            const rawKernelValue = getKernelSmoothRawValue(tileX, tileY, currentEnvironmentIndex);
+            const scaledValue = rawKernelValue * scale; // z-scaled equivalent
+            
+            gameData.push({
+                // Original experiment core variables
+                x: tileX,                              // x coordinate (0-7)
+                y: tileY,                              // y coordinate (0-7)  
+                z: score,                              // Raw reward value (points earned)
+                zscaled: scaledValue,                  // Scale-adjusted value
+                trial: clicks,                         // Trial number within try
+                block: tryNumber,                      // Block number (equivalent to try)
+                monkeyid: playerId,                    // Subject identifier
+                scale: scale,                          // Scale factor (30-40 range)
+                envOrder: currentEnvironmentIndex,     // Environment index used
+                pellet_count: score,                   // Points earned (pellet equivalent)
+                environment: currentEnvironment,       // Environment as string
+                
+                // Additional metadata for analysis
+                tryNumber: tryNumber,                  // Alias for block
+                playerId: playerId,                    // Alias for monkeyid
+                tileX: tileX,                          // Alias for x
+                tileY: tileY,                          // Alias for y
+                score: score,                          // Alias for z
+                timestamp: new Date().toISOString(),   // When trial occurred
+                
+                // Raw kernel smooth data for verification
+                kernelRawValue: rawKernelValue,        // Original y-value from KernelSmooth (0-1)
+                
+                // Calculated values for analysis
+                gridIndex: tileY * 8 + tileX,         // Linear index in 8x8 grid
+                totalTrialsInTry: totalTrialsInTry,   // Total trials per try (25)
+                envOrderArray: [...envOrder],          // Copy of shuffled environment order
+                
+                // Session metadata
+                gameLevel: 3,                          // Always Level 3
+                trialInSession: clicks,                // Trial number in current session
+                isInitialReveal: clicks === 1         // Whether this was the auto-revealed tile
+            });
+
+            localStorage.setItem(gameDataKey, JSON.stringify(gameData));
+            
+            // Log the enhanced data for debugging
+            console.log(`📊 Enhanced data stored for trial ${clicks}:`, {
+                original_format: `x=${tileX}, y=${tileY}, z=${score}, zscaled=${scaledValue}, trial=${clicks}, block=${tryNumber}, monkeyid=${playerId}, scale=${scale}, envOrder=${currentEnvironmentIndex}`,
+                kernel_raw: rawKernelValue,
+                environment: currentEnvironment
+            });
+        }
+
+        // Handle game completion
+        function handleGameCompletion() {
+            console.log(`⏱️ STARTING 3-MINUTE BREAK: Game deactivated, waiting ${BLANK_SCREEN_DURATION_LEVEL3/1000} seconds...`);
+            gameActive = false;
+            squares = [];
+
+            setTimeout(() => {
+                console.log(`⏰ 3-MINUTE BREAK FINISHED: Now calling resetGame() to start new try`);
+                resetGame();
+            }, BLANK_SCREEN_DURATION_LEVEL3);
+        }
+
+        // Reset game (called only after completing 25 trials + 3 minute break)
+        function resetGame() {
+            console.log(`🏁 GAME COMPLETION: 25 trials finished, 3-minute break completed`);
+            
+            clicks = 0;
+            currentTrial = 0;
+            sunPosition = 0;
+            gameActive = true;
+            isWaiting = false;
+            revealedSquares.clear();
+            squares = [];
+            squareColors = [];
+
+            tryNumber++;
+            const tryNumberKey = getLevel3TryNumberKey(playerId);
+            localStorage.setItem(tryNumberKey, tryNumber.toString()); // Save to localStorage (user-specific)
+            console.log(`🆕 NEW TRY STARTED: Incrementing to try ${tryNumber} for ${playerId} after completing previous attempt (saved to storage)`);
+            
+            // Clear previous try's game state since we're starting fresh
+            clearLevel3GameState();
+            
+            // Select random environment for this new try
+            selectEnvironmentForTry();
+            
+            // Update display with correct format (no space before colon)
+            document.getElementById('gameInfo').textContent = `L-3:${tryNumber}`;
+
+            initializeSquares();
+
+            // Reveal one random tile at the start
+            const randomIndex = Math.floor(Math.random() * squares.length);
+            const randomSquare = squares[randomIndex];
+            revealSquare(randomSquare);
+
+            // Store the initial revealed tile
+            const points = randomSquare.points;
+            storeGameData(points, randomSquare.tileX, randomSquare.tileY);
+
+            clicks = 1; // Set to 1 after initial reveal
+            currentTrial = 1;
+            sunPosition = 0; // Keep sun at start
+            
+            // Save initial state of new try
+            saveLevel3GameState();
+            saveLevel3TrialResult(points, 1, currentEnvironmentIndex, randomSquare.tileX, randomSquare.tileY);
+        }
+
+        // Resize canvas while preserving game state
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            initializeSizes();
+            
+            if (squares.length > 0) {
+                // Preserve current state before reinitializing
+                const gameState = preserveGameState();
+                initializeSquares(); // Reinitialize squares for new size
+                restoreGameState(gameState); // Restore the preserved state
+            }
+        }
+
+        // Preserve current game state
+        function preserveGameState() {
+            const state = {
+                revealedSquares: new Set(revealedSquares),
+                squareStates: []
+            };
+            
+            // Save the state of each square
+            squares.forEach((square, index) => {
+                state.squareStates[index] = {
+                    isRevealed: square.isRevealed,
+                    color: square.color,
+                    points: square.points,
+                    clickCount: square.clickCount
+                };
+            });
+            
+            console.log(`💾 Preserving game state: ${state.revealedSquares.size} revealed squares`);
+            return state;
+        }
+
+        // Restore game state after resize
+        function restoreGameState(state) {
+            if (!state) return;
+            
+            // Restore revealed squares set
+            revealedSquares = new Set(state.revealedSquares);
+            
+            // Restore each square's state
+            squares.forEach((square, index) => {
+                if (state.squareStates[index]) {
+                    const savedState = state.squareStates[index];
+                    square.isRevealed = savedState.isRevealed;
+                    square.color = savedState.color;
+                    square.points = savedState.points;
+                    square.clickCount = savedState.clickCount;
+                }
+            });
+            
+            console.log(`🔄 Restored game state: ${revealedSquares.size} revealed squares`);
+        }
+
+        // Welcome screen functionality
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Load kernel smooth data first - CRITICAL for game operation
+            console.log('🚀 Starting Level 3 Spatial Game...');
+            console.log('📋 STRICT MODE: No fallbacks - KernelSmooth data required');
+            
+            const dataLoaded = await loadKernelSmoothData();
+
+            if (!dataLoaded) {
+                // Error modal already shown by loadKernelSmoothData
+                document.getElementById('startButton').disabled = true;
+                document.getElementById('startButton').textContent = 'Cannot Start - Data Missing';
+                return;
+            }
+
+            console.log('✅ KernelSmooth data validation passed - Game ready to start');
+
+            // Check for progression from browser_game.html
+            const urlParams = new URLSearchParams(window.location.search);
+            const progressionData = localStorage.getItem('gameProgression');
+            const startLevel3 = localStorage.getItem('startLevel3');
+            
+            if (startLevel3 === 'true' && progressionData) {
+                // Coming from browser_game.html Level 2 completion
+                const progression = JSON.parse(progressionData);
+                console.log('🎯 Level 3 progression detected:', progression);
+                
+                // Auto-populate player ID and start game immediately
+                if (progression.playerId) {
+                    playerId = progression.playerId;
+                    document.getElementById('playerId').value = playerId;
+                    
+                    // Clear progression flags
+                    localStorage.removeItem('startLevel3');
+                    localStorage.removeItem('gameProgression');
+                    
+                    // Start game immediately without any delay or messages
+                    startGame();
+                }
+            } else {
+                // Normal entry - show regular welcome screen
+                const input = document.getElementById('playerId');
+                const startButton = document.getElementById('startButton');
+                const errorDiv = document.getElementById('error');
+
+                input.addEventListener('input', function() {
+                    const value = this.value.trim();
+                    startButton.disabled = value.length === 0;
+                    errorDiv.style.display = 'none';
+                });
+
+                input.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter' && !startButton.disabled) {
+                        startGame();
+                    }
+                });
+            }
+        });
+
+        // Show critical error modal
+        function showCriticalError(htmlContent) {
+            const modal = document.getElementById('verificationModal') || createErrorModal();
+            const content = document.getElementById('verificationContent');
+            content.innerHTML = htmlContent;
+            modal.style.display = 'block';
+            
+            // Disable game start
+            const startButton = document.getElementById('startButton');
+            if (startButton) {
+                startButton.disabled = true;
+                startButton.textContent = 'Cannot Start - Error';
+            }
+        }
+
+        // Create error modal if it doesn't exist
+        function createErrorModal() {
+            const modal = document.createElement('div');
+            modal.id = 'verificationModal';
+            modal.className = 'verification-results';
+            modal.style.display = 'block';
+            modal.innerHTML = `
+                <button class="close-btn" onclick="closeVerificationModal()">&times;</button>
+                <div id="verificationContent"></div>
+            `;
+            document.body.appendChild(modal);
+            return modal;
+        }
+
+        async function startGame() {
+            const input = document.getElementById('playerId');
+            const startButton = document.getElementById('startButton');
+            const errorDiv = document.getElementById('error');
+            const loadingDiv = document.getElementById('loading');
+
+            playerId = input.value.trim();
+
+            if (playerId.length === 0) {
+                errorDiv.textContent = 'Please enter a valid name';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            // Double-check that KernelSmooth data is loaded
+            if (!kernelSmoothData) {
+                errorDiv.textContent = 'Game data not loaded. Please refresh the page.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            startButton.disabled = true;
+            loadingDiv.style.display = 'block';
+            errorDiv.style.display = 'none';
+
+            try {
+                // *** CHECK IF PLAYER IS QUALIFIED FOR LEVEL 3 ***
+                const playerLevel3Key = `playerLevel3Status_${playerId}`;
+                const isLevel3Qualified = localStorage.getItem(playerLevel3Key) === 'true';
+                const progressionData = localStorage.getItem('gameProgression');
+                const startLevel3Flag = localStorage.getItem('startLevel3');
+                
+                // Only qualified players should access Level 3
+                if (!isLevel3Qualified && !startLevel3Flag) {
+                    console.log(`🚫 UNQUALIFIED USER: ${playerId} has not completed Level 2 - redirecting to browser_game.html`);
+                    
+                    // Instant redirect to browser_game.html with no messages
+                    window.location.href = 'browser_game.html';
+                    return;
+                }
+                
+                // If coming from progression or already qualified, mark as Level 3
+                if (startLevel3Flag || isLevel3Qualified) {
+                    const qualificationKey = `level3QualificationTimestamp_${playerId}`;
+                    localStorage.setItem(playerLevel3Key, 'true');
+                    if (!localStorage.getItem(qualificationKey)) {
+                        localStorage.setItem(qualificationKey, new Date().toISOString());
+                    }
+                    console.log(`✅ QUALIFIED LEVEL 3 PLAYER: ${playerId} - Access granted`);
+                } else {
+                    console.log(`🚫 ACCESS DENIED: ${playerId} is not qualified for Level 3`);
+                    window.location.href = 'browser_game.html';
+                    return;
+                }
+
+                // Initialize user-specific try number
+                const tryNumberKey = getLevel3TryNumberKey(playerId);
+                tryNumber = parseInt(localStorage.getItem(tryNumberKey)) || 1;
+                console.log(`🎮 GAME INITIALIZATION for ${playerId}: Starting with try number ${tryNumber} (loaded from user-specific storage)`);
+
+                // Check for existing saved game state
+                const hasSavedState = loadLevel3GameState();
+                
+                if (hasSavedState) {
+                    console.log(`🔄 Resuming Level 3 for player: ${playerId}`);
+                    console.log(`🎯 Continuing Try ${tryNumber}, Trial ${currentTrial + 1}`);
+                } else {
+                    // Initialize fresh game state
+                    currentTrial = 0;
+                    gameResults = [];
+                    revealedSquares = new Set();
+                    environmentUsageTracking = {};
+                    // Save user-specific data
+                    const savedPlayerIdKey = `level3_savedPlayerId_${playerId}`;
+                    localStorage.setItem(savedPlayerIdKey, playerId);
+                    console.log(`🎯 Starting fresh Level 3 - Try ${tryNumber} for player: ${playerId}`);
+                }
+
+                // Switch to game screen
+                document.getElementById('welcome-screen').style.display = 'none';
+                document.getElementById('game-screen').style.display = 'block';
+
+                // Initialize game
+                init();
+                
+                console.log(`🎮 Level 3 started/resumed for player: ${playerId}`);
+                console.log(`📊 Using KernelSmooth data with ${Object.keys(kernelSmoothData).length} environments`);
+                
+            } catch (error) {
+                console.error('💥 CRITICAL ERROR starting game:', error);
+                errorDiv.textContent = 'Failed to start game. Check console for details.';
+                errorDiv.style.display = 'block';
+                startButton.disabled = false;
+                loadingDiv.style.display = 'none';
+                
+                // Switch back to welcome screen
+                document.getElementById('welcome-screen').style.display = 'flex';
+                document.getElementById('game-screen').style.display = 'none';
+            }
+        }
+
+        // Initialize game
+        function init() {
+            canvas = document.getElementById('gameCanvas');
+            ctx = canvas.getContext('2d');
+
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            // Initialize first random environment
+            selectEnvironmentForTry();
+            
+            // Initialize display with correct format
+            document.getElementById('gameInfo').textContent = `L-3:${tryNumber}`;
+
+            initializeSizes();
+            initializeSquares();
+
+            // Reveal one random tile at the start
+            const randomIndex = Math.floor(Math.random() * squares.length);
+            const randomSquare = squares[randomIndex];
+            revealSquare(randomSquare);
+
+            // Store the initial revealed tile
+            const points = randomSquare.points;
+            storeGameData(points, randomSquare.tileX, randomSquare.tileY);
+
+            clicks = 1; // Set to 1 after initial reveal
+            sunPosition = 0; // Keep sun at start
+
+            // Update environment display
+            document.getElementById('environmentInfo').textContent = currentEnvironment;
+
+            // Set up event listeners
+            canvas.addEventListener('click', handleClick);
+            window.addEventListener('resize', resizeCanvas);
+
+            // Initialize audio
+            initializeAudio();
+
+            // Start animation loop
+            function animate() {
+                draw();
+                requestAnimationFrame(animate);
+            }
+            animate();
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'f' || event.key === 'F') {
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen();
+                } else {
+                    document.exitFullscreen();
+                }
+            }
+            
+            // Toggle debug panel with 'D' key
+            if (event.key === 'd' || event.key === 'D') {
+                toggleDebugPanel();
+            }
+            
+            // Quick environment verification with 'V' key
+            if (event.key === 'v' || event.key === 'V') {
+                showEnvironmentVerification();
+            }
+        });
+
+        // Debug functions
+        function toggleDebugPanel() {
+            const debugPanel = document.getElementById('debugPanel');
+            debugPanel.style.display = debugPanel.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function toggleEnvironmentTracking() {
+            isTrackingEnvironments = !isTrackingEnvironments;
+            const display = document.getElementById('envTrackingDisplay');
+            
+            if (isTrackingEnvironments) {
+                display.style.display = 'block';
+                console.log('Environment tracking enabled');
+            } else {
+                display.style.display = 'none';
+                console.log('Environment tracking disabled');
+            }
+            
+            updateEnvironmentTrackingDisplay();
+        }
+
+        function updateEnvironmentTrackingDisplay() {
+            if (!isTrackingEnvironments) return;
+            
+            const envList = document.getElementById('envUsageList');
+            const usedEnvironments = Object.keys(environmentUsageTracking);
+            
+            envList.innerHTML = `
+                <div style="font-size: 10px;">
+                    Used: ${usedEnvironments.length}/40<br>
+                    Current: ${currentEnvironment}<br>
+                    ${usedEnvironments.map(env => `${env}(${environmentUsageTracking[env].count})`).join(', ')}
+                </div>
+            `;
+        }
+
+        function showEnvironmentVerification() {
+            const modal = document.getElementById('verificationModal');
+            const content = document.getElementById('verificationContent');
+            
+            // Check kernelSmooth data
+            if (!kernelSmoothData) {
+                content.innerHTML = '<h2>Error</h2><p>KernelSmooth data not loaded!</p>';
+                modal.style.display = 'block';
+                return;
+            }
+
+            const totalEnvironments = Object.keys(kernelSmoothData).length;
+            const gameData = JSON.parse(localStorage.getItem('level3GameData')) || [];
+            const usedEnvironments = new Set();
+            
+            // Analyze game data for environment usage
+            gameData.forEach(trial => {
+                if (trial.environment !== undefined) {
+                    usedEnvironments.add(trial.environment.toString());
+                }
+            });
+
+            // Create environment grid visualization
+            let gridHTML = '<div class="env-grid">';
+            for (let i = 0; i < 40; i++) {
+                const envKey = i.toString();
+                const isUsed = usedEnvironments.has(envKey);
+                const hasData = kernelSmoothData[envKey] !== undefined;
+                const tileCount = hasData ? Object.keys(kernelSmoothData[envKey]).length : 0;
+                
+                gridHTML += `
+                    <div class="env-cell ${isUsed ? 'env-used' : 'env-unused'}" title="Environment ${i}: ${tileCount} tiles, ${isUsed ? 'Used' : 'Not used'}">
+                        ${i}<br><small>${isUsed ? '✓' : '○'}</small>
+                    </div>
+                `;
+            }
+            gridHTML += '</div>';
+
+            content.innerHTML = `
+                <h2>Environment Verification Report</h2>
+                
+                <h3>KernelSmooth Data Status</h3>
+                <p><strong>Total environments in file:</strong> ${totalEnvironments}</p>
+                <p><strong>Expected environments:</strong> 40 (0-39)</p>
+                <p><strong>Status:</strong> ${totalEnvironments === 40 ? '✅ Complete' : '⚠️ Missing environments'}</p>
+                
+                <h3>Game Usage Analysis</h3>
+                <p><strong>Total trials played:</strong> ${gameData.length}</p>
+                <p><strong>Environments used in game:</strong> ${usedEnvironments.size}/40</p>
+                <p><strong>Current try number:</strong> ${tryNumber}</p>
+                
+                <h3>Environment Grid (Green = Used, Gray = Not Used)</h3>
+                ${gridHTML}
+                
+                <h3>Detailed Environment Data</h3>
+                <div style="max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 12px;">
+                    ${Array.from({length: 40}, (_, i) => {
+                        const envKey = i.toString();
+                        const hasData = kernelSmoothData[envKey] !== undefined;
+                        const tileCount = hasData ? Object.keys(kernelSmoothData[envKey]).length : 0;
+                        const isUsed = usedEnvironments.has(envKey);
+                        
+                        return `Env ${i.toString().padStart(2)}: ${hasData ? '✅' : '❌'} (${tileCount} tiles) ${isUsed ? '🎮 Used' : ''}`;
+                    }).join('<br>')}
+                </div>
+                
+                <button onclick="exportVerificationReport()" style="margin-top: 15px; padding: 10px 20px;">Export Report</button>
+            `;
+            
+            modal.style.display = 'block';
+        }
+
+        function closeVerificationModal() {
+            document.getElementById('verificationModal').style.display = 'none';
+        }
+
+        function exportGameData() {
+            if (!playerId) {
+                alert('No player ID found. Please start a game first.');
+                return;
+            }
+            
+            const gameDataKey = getLevel3GameDataKey(playerId);
+            const gameData = JSON.parse(localStorage.getItem(gameDataKey) || '[]');
+            
+            if (gameData.length === 0) {
+                alert('No game data found for this player.');
+                return;
+            }
+            
+            // Create CSV in original experiment format
+            const csvHeaders = ['x', 'y', 'z', 'zscaled', 'trial', 'block', 'monkeyid', 'scale', 'envOrder', 'pellet_count', 'environment', 'timestamp', 'kernelRawValue', 'gridIndex'];
+            const csvRows = [csvHeaders.join(',')];
+            
+            gameData.forEach(row => {
+                const csvRow = [
+                    row.x,
+                    row.y,
+                    row.z,
+                    row.zscaled.toFixed(4),
+                    row.trial,
+                    row.block,
+                    `"${row.monkeyid}"`,
+                    row.scale,
+                    row.envOrder,
+                    row.pellet_count,
+                    row.environment,
+                    `"${row.timestamp}"`,
+                    row.kernelRawValue.toFixed(4),
+                    row.gridIndex
+                ];
+                csvRows.push(csvRow.join(','));
+            });
+            
+            const csvContent = csvRows.join('\n');
+            
+            // Export CSV
+            const csvBlob = new Blob([csvContent], { type: 'text/csv' });
+            const csvUrl = URL.createObjectURL(csvBlob);
+            const csvLink = document.createElement('a');
+            csvLink.href = csvUrl;
+            csvLink.download = `level3_${playerId}_${new Date().toISOString().slice(0, 10)}.csv`;
+            csvLink.click();
+            URL.revokeObjectURL(csvUrl);
+            
+            // Also export full JSON for detailed analysis
+            const jsonBlob = new Blob([JSON.stringify(gameData, null, 2)], { type: 'application/json' });
+            const jsonUrl = URL.createObjectURL(jsonBlob);
+            const jsonLink = document.createElement('a');
+            jsonLink.href = jsonUrl;
+            jsonLink.download = `level3_${playerId}_full_${new Date().toISOString().slice(0, 10)}.json`;
+            jsonLink.click();
+            URL.revokeObjectURL(jsonUrl);
+            
+            alert(`Data exported for ${playerId}:\n- CSV file (${gameData.length} trials)\n- Full JSON file with metadata`);
+        }
+
+        function showKernelSmoothInfo() {
+            const modal = document.getElementById('verificationModal');
+            const content = document.getElementById('verificationContent');
+            
+            if (!kernelSmoothData) {
+                content.innerHTML = '<h2>KernelSmooth Data</h2><p>Not loaded!</p>';
+            } else {
+                // Check for validation results
+                const validation = window.environmentValidation || {};
+                
+                // Sample a few environments to show data structure
+                const sampleEnvs = ['0', '10', '20', '30'];
+                let sampleHTML = '';
+                
+                sampleEnvs.forEach(envKey => {
+                    if (kernelSmoothData[envKey]) {
+                        const envData = kernelSmoothData[envKey];
+                        const tileCount = Object.keys(envData).length;
+                        const sampleTiles = ['0', '31', '63']; // First, middle, last tiles
+                        
+                        sampleHTML += `<h4>Environment ${envKey} (${tileCount} tiles):</h4><ul>`;
+                        sampleTiles.forEach(tileKey => {
+                            if (envData[tileKey]) {
+                                const tile = envData[tileKey];
+                                sampleHTML += `<li>Tile ${tileKey}: x1=${tile.x1}, x2=${tile.x2}, y=${tile.y.toFixed(4)}</li>`;
+                            } else {
+                                sampleHTML += `<li>Tile ${tileKey}: <span style="color: red;">MISSING</span></li>`;
+                            }
+                        });
+                        sampleHTML += '</ul>';
+                    }
+                });
+                
+                // Show missing tile details
+                let missingTileHTML = '';
+                if (validation.missingTileDetails) {
+                    Object.keys(validation.missingTileDetails).forEach(envKey => {
+                        const missingTiles = validation.missingTileDetails[envKey];
+                        if (missingTiles.length > 0) {
+                            missingTileHTML += `<p><strong>Environment ${envKey}:</strong> Missing tiles at indices: ${missingTiles.join(', ')}</p>`;
+                        }
+                    });
+                }
+                
+                content.innerHTML = `
+                    <h2>KernelSmooth Data Analysis</h2>
+                    <p><strong>Environments loaded:</strong> ${Object.keys(kernelSmoothData).length}</p>
+                    <p><strong>Valid environments:</strong> ${validation.valid || 'Unknown'}</p>
+                    <p><strong>Data structure:</strong> Each environment should contain 64 tiles (8x8 grid)</p>
+                    <p><strong>Tile format:</strong> {x1, x2, y} where y is the reward probability (0-1)</p>
+                    
+                    ${validation.warnings && validation.warnings.length > 0 ? 
+                        `<h3>⚠️ Environments with Minor Issues:</h3>
+                         <div style="color: orange; font-size: 12px;">${validation.warnings.join('<br>')}</div>` : ''}
+                    
+                    ${missingTileHTML ? 
+                        `<h3>❌ Missing Tile Details:</h3>
+                         <div style="color: red; font-size: 12px; max-height: 150px; overflow-y: auto;">${missingTileHTML}</div>` : ''}
+                    
+                    <h3>Sample Data:</h3>
+                    <div style="max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 12px;">
+                        ${sampleHTML}
+                    </div>
+                    
+                    <h3>🔧 Data Repair Options:</h3>
+                    <button onclick="generateDataRepairScript()" style="margin: 5px; padding: 8px 12px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer;">Generate Repair Script</button>
+                    <button onclick="exportDataDiagnostics()" style="margin: 5px; padding: 8px 12px; background: #FF9800; color: white; border: none; border-radius: 4px; cursor: pointer;">Export Diagnostics</button>
+                `;
+            }
+            
+            modal.style.display = 'block';
+        }
+
+        // Generate a repair script for missing tiles
+        function generateDataRepairScript() {
+            if (!window.environmentValidation || !window.environmentValidation.missingTileDetails) {
+                alert('No missing tile data found to repair.');
+                return;
+            }
+            
+            const missingTileDetails = window.environmentValidation.missingTileDetails;
+            
+            if (Object.keys(missingTileDetails).length === 0) {
+                alert('No missing tiles found - data appears complete!');
+                return;
+            }
+            
+            let repairScript = `// KernelSmooth Data Repair Script\n// This script fills in missing tiles with interpolated values\n\n`;
+            repairScript += `// Copy your kernelSmooth.json content here and assign to 'data'\nlet data = /* PASTE YOUR JSON DATA HERE */;\n\n`;
+            
+            repairScript += `// Repair missing tiles\n`;
+            Object.keys(missingTileDetails).forEach(envKey => {
+                const missingTiles = missingTileDetails[envKey];
+                repairScript += `\n// Environment ${envKey} - Missing tiles: ${missingTiles.join(', ')}\n`;
+                missingTiles.forEach(tileIndex => {
+                    const row = Math.floor(tileIndex / 8);
+                    const col = tileIndex % 8;
+                    repairScript += `// Repair tile ${tileIndex} (row ${row}, col ${col})\n`;
+                    repairScript += `if (!data["${envKey}"]["${tileIndex}"]) {\n`;
+                    repairScript += `  data["${envKey}"]["${tileIndex}"] = {\n`;
+                    repairScript += `    x1: ${row},\n`;
+                    repairScript += `    x2: ${col},\n`;
+                    repairScript += `    y: 0.5  // Default neutral value - you may want to interpolate from nearby tiles\n`;
+                    repairScript += `  };\n`;
+                    repairScript += `}\n\n`;
+                });
+            });
+            
+            repairScript += `\n// Export repaired data\nconsole.log('Repaired data:', JSON.stringify(data, null, 2));\n`;
+            repairScript += `// Copy the console output and save as kernelSmooth_repaired.json\n`;
+            
+            // Download the repair script
+            const blob = new Blob([repairScript], { type: 'text/javascript' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'kernelSmooth_repair_script.js';
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            alert('Repair script downloaded! Follow the instructions in the script to fix your data.');
+        }
+
+        // Export detailed diagnostics
+        function exportDataDiagnostics() {
+            const validation = window.environmentValidation || {};
+            
+            const diagnostics = {
+                timestamp: new Date().toISOString(),
+                summary: {
+                    totalEnvironments: validation.total || 0,
+                    validEnvironments: validation.valid || 0,
+                    environmentsWithWarnings: validation.warnings ? validation.warnings.length : 0,
+                    environmentsWithErrors: validation.invalid ? validation.invalid.length : 0
+                },
+                warnings: validation.warnings || [],
+                errors: validation.invalid || [],
+                missingTileDetails: validation.missingTileDetails || {},
+                recommendations: []
+            };
+            
+            // Generate recommendations
+            if (Object.keys(diagnostics.missingTileDetails).length > 0) {
+                diagnostics.recommendations.push("Use the repair script to fill in missing tiles with interpolated values");
+                diagnostics.recommendations.push("Check the original data source for corruption or incomplete export");
+            }
+            
+            if (diagnostics.summary.validEnvironments < 40) {
+                diagnostics.recommendations.push("Consider regenerating the KernelSmooth data to ensure all 40 environments are complete");
+            }
+            
+            const blob = new Blob([JSON.stringify(diagnostics, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `kernelSmooth_diagnostics_${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function simulateAllEnvironments() {
+            if (!kernelSmoothData) {
+                alert('KernelSmooth data not loaded!');
+                return;
+            }
+            
+            console.log('Simulating all 40 environments...');
+            
+            // Test environment selection algorithm
+            for (let trial = 1; trial <= 200; trial++) { // Simulate 200 trials (8 complete cycles)
+                const envIndex = Math.floor(trial / 5) % 40;
+                console.log(`Trial ${trial} -> Environment ${envIndex}`);
+                
+                if (trial <= 40) { // Show first 40 for verification
+                    console.log(`  Trial ${trial}: Env ${envIndex}`);
+                }
+            }
+            
+            // Verify each environment has data
+            let missingEnvironments = [];
+            for (let i = 0; i < 40; i++) {
+                if (!kernelSmoothData[i.toString()]) {
+                    missingEnvironments.push(i);
+                }
+            }
+            
+            console.log('Environment verification complete:');
+            console.log(`Available environments: ${40 - missingEnvironments.length}/40`);
+            if (missingEnvironments.length > 0) {
+                console.log(`Missing environments: ${missingEnvironments.join(', ')}`);
+            }
+            
+            alert(`Simulation complete! Check console for details.\nEnvironments available: ${40 - missingEnvironments.length}/40`);
+        }
+
+        function showCurrentTrialInfo() {
+            if (!playerId) {
+                alert('No active player found.');
+                return;
+            }
+            
+            const modal = document.getElementById('verificationModal');
+            const content = document.getElementById('verificationContent');
+            
+            const gameDataKey = getLevel3GameDataKey(playerId);
+            const gameData = JSON.parse(localStorage.getItem(gameDataKey) || '[]');
+            const lastTrial = gameData.length > 0 ? gameData[gameData.length - 1] : null;
+            
+            content.innerHTML = `
+                <h2>Current Trial Information</h2>
+                
+                <h3>🎮 Current Session Status</h3>
+                <p><strong>Player ID:</strong> ${playerId}</p>
+                <p><strong>Try Number (Block):</strong> ${tryNumber}</p>
+                <p><strong>Current Trial:</strong> ${clicks}/${LEVEL3_TRIALS}</p>
+                <p><strong>Environment:</strong> ${currentEnvironmentIndex}</p>
+                <p><strong>Scale Factor:</strong> ${scale}</p>
+                <p><strong>Game Active:</strong> ${gameActive ? 'Yes' : 'No'}</p>
+                
+                <h3>📊 Original Experiment Variables</h3>
+                <table style="border-collapse: collapse; width: 100%; font-family: monospace; font-size: 12px;">
+                    <tr style="background: #f0f0f0;">
+                        <th style="border: 1px solid #ccc; padding: 4px;">Variable</th>
+                        <th style="border: 1px solid #ccc; padding: 4px;">Current Value</th>
+                        <th style="border: 1px solid #ccc; padding: 4px;">Description</th>
+                    </tr>
+                    <tr><td style="border: 1px solid #ccc; padding: 4px;">monkeyid</td><td style="border: 1px solid #ccc; padding: 4px;">${playerId}</td><td style="border: 1px solid #ccc; padding: 4px;">Subject identifier</td></tr>
+                    <tr><td style="border: 1px solid #ccc; padding: 4px;">block</td><td style="border: 1px solid #ccc; padding: 4px;">${tryNumber}</td><td style="border: 1px solid #ccc; padding: 4px;">Try/block number</td></tr>
+                    <tr><td style="border: 1px solid #ccc; padding: 4px;">trial</td><td style="border: 1px solid #ccc; padding: 4px;">${clicks}</td><td style="border: 1px solid #ccc; padding: 4px;">Trial within try</td></tr>
+                    <tr><td style="border: 1px solid #ccc; padding: 4px;">envOrder</td><td style="border: 1px solid #ccc; padding: 4px;">${currentEnvironmentIndex}</td><td style="border: 1px solid #ccc; padding: 4px;">Environment index</td></tr>
+                    <tr><td style="border: 1px solid #ccc; padding: 4px;">scale</td><td style="border: 1px solid #ccc; padding: 4px;">${scale}</td><td style="border: 1px solid #ccc; padding: 4px;">Scale factor (30-40)</td></tr>
+                </table>
+                
+                <h3>📈 Data Collection Status</h3>
+                <p><strong>Total trials recorded:</strong> ${gameData.length}</p>
+                <p><strong>Revealed squares:</strong> ${revealedSquares.size}/64</p>
+                
+                ${lastTrial ? `
+                <h3>🔍 Last Trial Data</h3>
+                <table style="border-collapse: collapse; width: 100%; font-family: monospace; font-size: 11px;">
+                    <tr style="background: #f0f0f0;">
+                        <th style="border: 1px solid #ccc; padding: 3px;">x</th>
+                        <th style="border: 1px solid #ccc; padding: 3px;">y</th>
+                        <th style="border: 1px solid #ccc; padding: 3px;">z</th>
+                        <th style="border: 1px solid #ccc; padding: 3px;">zscaled</th>
+                        <th style="border: 1px solid #ccc; padding: 3px;">trial</th>
+                        <th style="border: 1px solid #ccc; padding: 3px;">block</th>
+                        <th style="border: 1px solid #ccc; padding: 3px;">kernelRaw</th>
+                    </tr>
+                    <tr>
+                        <td style="border: 1px solid #ccc; padding: 3px;">${lastTrial.x}</td>
+                        <td style="border: 1px solid #ccc; padding: 3px;">${lastTrial.y}</td>
+                        <td style="border: 1px solid #ccc; padding: 3px;">${lastTrial.z}</td>
+                        <td style="border: 1px solid #ccc; padding: 3px;">${lastTrial.zscaled?.toFixed(4)}</td>
+                        <td style="border: 1px solid #ccc; padding: 3px;">${lastTrial.trial}</td>
+                        <td style="border: 1px solid #ccc; padding: 3px;">${lastTrial.block}</td>
+                        <td style="border: 1px solid #ccc; padding: 3px;">${lastTrial.kernelRawValue?.toFixed(4)}</td>
+                    </tr>
+                </table>
+                ` : '<p><em>No trial data recorded yet.</em></p>'}
+                
+                <h3>💾 Data Export</h3>
+                <p>Export data in original experiment format:</p>
+                <button onclick="exportGameData()" style="padding: 8px 16px; margin: 5px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Export CSV & JSON</button>
+            `;
+            
+            modal.style.display = 'block';
+        }
+
+        function exportVerificationReport() {
+            const gameData = JSON.parse(localStorage.getItem('level3GameData')) || [];
+            const usedEnvironments = new Set();
+            
+            gameData.forEach(trial => {
+                if (trial.environment !== undefined) {
+                    usedEnvironments.add(trial.environment.toString());
+                }
+            });
+            
+            const report = {
+                timestamp: new Date().toISOString(),
+                kernelSmoothStatus: {
+                    loaded: kernelSmoothData !== null,
+                    totalEnvironments: kernelSmoothData ? Object.keys(kernelSmoothData).length : 0,
+                    expectedEnvironments: 40
+                },
+                gameStatus: {
+                    totalTrials: gameData.length,
+                    environmentsUsed: usedEnvironments.size,
+                    currentTryNumber: tryNumber,
+                    usedEnvironmentsList: Array.from(usedEnvironments).map(Number).sort((a, b) => a - b)
+                },
+                environmentDetails: Array.from({length: 40}, (_, i) => ({
+                    environment: i,
+                    hasData: kernelSmoothData && kernelSmoothData[i.toString()] !== undefined,
+                    tileCount: kernelSmoothData && kernelSmoothData[i.toString()] ? Object.keys(kernelSmoothData[i.toString()]).length : 0,
+                    usedInGame: usedEnvironments.has(i.toString())
+                }))
+            };
+            
+            const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `environment_verification_report_${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# Get the directory containing the app bundle
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../" && pwd)"
+cd "$APP_DIR"
+
+# Open Terminal and run the game launcher with Chrome preference
+osascript -e "tell application \"Terminal\" to do script \"cd '$APP_DIR' && ./start_game.sh\""
